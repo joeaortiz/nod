@@ -20,7 +20,7 @@ import data_util
 import util
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch-size', type=int, default=20,
+parser.add_argument('--batch-size', type=int, default=10,
                     help='Batch size.')
 parser.add_argument('--epochs', type=int, default=50,
                     help='Number of training epochs.')
@@ -51,9 +51,9 @@ parser.add_argument('--log-interval', type=int, default=5,
                          'training status.')
 
 parser.add_argument('--train_dir', type=str,
-                    default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/train',
+                    default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/edgar',
                     help='Path to training dataset.')
-parser.add_argument('--num_pairs_per_instance', type=int, default=100,
+parser.add_argument('--num_pairs_per_instance', type=int, default=5,
                     help='Number of pairs of views per scene.')
 parser.add_argument('--name', type=str, default='test',
                     help='Experiment name.')
@@ -164,11 +164,11 @@ for epoch in range(1, args.epochs + 1):
 
         optimizer.zero_grad()
 
-        state = model.encoder(imgs)
+        recs = model(imgs)
 
         # Decode embedding
-        flat_state = state.reshape(-1, state.size(2))
-        comps, masks = model.decoder(flat_state)
+        # flat_state = state.reshape(-1, state.size(2))
+        # comps, masks = model.decoder(flat_state)
 
         # comps = comps.view(-1, self.num_slots, comps.size(1), comps.size(2), comps.size(3))
         # masks = masks.view(-1, self.num_slots, masks.size(1), masks.size(2))
