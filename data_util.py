@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision
 
+
 def load_rgb(path, sidelength=None):
     img = imageio.imread(path)[:, :, :3]
     img = skimage.img_as_float32(img)

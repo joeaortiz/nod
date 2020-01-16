@@ -53,7 +53,7 @@ parser.add_argument('--log-interval', type=int, default=5,
 parser.add_argument('--train_dir', type=str,
                     default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/edgar',
                     help='Path to training dataset.')
-parser.add_argument('--num_pairs_per_instance', type=int, default=20,
+parser.add_argument('--num_pairs_per_instance', type=int, default=10,
                     help='Number of pairs of views per scene.')
 parser.add_argument('--name', type=str, default='test',
                     help='Experiment name.')
