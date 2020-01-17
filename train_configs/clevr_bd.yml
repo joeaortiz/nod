@@ -1,0 +1,13 @@
+# Configuration file
+
+train_dir: /mnt/datasets/joe/clevr/2objects/train
+val_dir: /mnt/datasets/joe/clevr/2objects/val
+train_pairs_per_scene: 300
+num_train_scenes: 1
+val_pairs_per_scene: 90
+num_val_scenes: 1
+
+batch_size: 10
+epochs: 100
+
+name: one_scene

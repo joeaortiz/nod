@@ -1,4 +1,4 @@
-import argparse
+import configargparse
 import torch
 import util
 import datetime
@@ -19,8 +19,10 @@ import model
 import data_util
 import util
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--batch-size', type=int, default=2,
+parser = configargparse.ArgumentParser()
+parser.add('-c', '--config_filepath', required=False, is_config_file=True, help='Path to config file.')
+
+parser.add_argument('--batch_size', type=int, default=2,
                     help='Batch size.')
 parser.add_argument('--epochs', type=int, default=50,
                     help='Number of training epochs.')
@@ -53,7 +55,7 @@ parser.add_argument('--log-interval', type=int, default=5,
 parser.add_argument('--train_dir', type=str,
                     default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/train',
                     help='Path to training dataset.')
-parser.add_argument('--train_pairs_per_instance', type=int, default=20,
+parser.add_argument('--train_pairs_per_scene', type=int, default=20,
                     help='Number of pairs of views per scene.')
 parser.add_argument('--num_train_scenes', type=int, default=-1,
                     help='Number of different scene instances to use. -1 is use all scenes. ')
@@ -66,9 +68,9 @@ parser.add_argument('--val_pairs_per_scene', type=int, default=20,
 parser.add_argument('--num_val_scenes', type=int, default=-1,
                     help='Number of different scene instances to use. -1 is use all scenes. ')
 
-p.add_argument('--steps_til_val', type=int, default=200,
+parser.add_argument('--steps_til_val', type=int, default=200,
                help='Number of iterations until validation set is run.')
-p.add_argument('--no_validation', action='store_true', default=False,
+parser.add_argument('--no_validation', action='store_true', default=False,
                help='If no validation set should be used.')
 
 parser.add_argument('--name', type=str, default='test',
@@ -217,7 +219,7 @@ for epoch in range(1, args.epochs + 1):
                 same_view_losses = []
                 diff_view_losses = []
                 total_losses = []
-                for i, data_batch in val_loader:
+                for data_batch in val_loader:
                     img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
                     imgs = torch.cat((img1, img2), dim=0)
                     action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
@@ -233,15 +235,15 @@ for epoch in range(1, args.epochs + 1):
                     masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
                     recs = masked_comps.sum(dim=1)
 
-                    rec_views = recs[:args.batch_size * 2]
-                    novel_views = recs[args.batch_size * 2:]
+                    rec_views = recs[:2 * 2]
+                    novel_views = recs[2 * 2:]
 
                     same_view_loss = l2_loss(rec_views, imgs)
                     novel_view_loss = l2_loss(novel_views, imgs)
                     total_loss = same_view_loss + novel_view_loss
-                    same_view_losses.append(same_view_loss)
-                    diff_view_losses.append(novel_view_loss)
-                    total_losses.append(total_loss)
+                    same_view_losses.append(same_view_loss.item())
+                    diff_view_losses.append(novel_view_loss.item())
+                    total_losses.append(total_loss.item())
 
                 model.write_updates(writer, recs, imgs, comps,
                                     scaled_masks, masked_comps, step, prefix='val_')
