@@ -153,7 +153,6 @@ class TransitionGNN(torch.nn.Module):
             edge_attr = self._edge_model(
                 node_attr[row], node_attr[col], edge_attr)
 
-
         # Same action on all nodes
         action_vec = action.repeat(1, self.num_objects)
         action_vec = action_vec.view(-1, self.action_dim)

@@ -4,6 +4,7 @@ import torchvision
 import torch.nn.functional as F
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import modules
 
@@ -59,46 +60,118 @@ class NodModel(nn.Module):
 
         return self.l2_loss(predicted, target)
 
-    @staticmethod
-    def write_updates(writer, reconstructions, imgs, iter, prefix="", num_imgs=5):
-        """Writes tensorboard summaries using tensorboardx api. """
+    def write_updates(self, writer, reconstructions, images_gt, comps, masks, masked_comps,
+                      iter, prefix="", num_img_pairs=3, num_input_pairs=10):
+        """ Writes tensorboard summaries using tensorboardx api.
+            num_img_pairs: Number of input image pairs to display.
+        """
+        w, h = images_gt.size(2), images_gt.size(3)
+        images_gt = images_gt.reshape(-1, 2, 3, w, h)
+        batch_size = images_gt.size(0)
+        if num_img_pairs > batch_size:
+            num_img_pairs = batch_size
 
-        batch_size = imgs.size(0) // 2
-        if num_imgs > batch_size:
-            num_imgs = batch_size
+        same_view_recs = reconstructions[:batch_size*2].reshape(batch_size, 2, 3, w, h)
+        diff_view_recs = reconstructions[batch_size*2:].reshape(batch_size, 2, 3, w, h)
 
-        disp_idx = np.random.choice(batch_size*2, num_imgs, replace=False)
+        same_view_comps = comps[:batch_size*2].reshape(
+            batch_size, 2, self.num_slots, 3, w, h)
+        diff_view_comps = comps[batch_size*2:].reshape(
+            batch_size, 2, self.num_slots, 3, w, h)
+        same_view_masked_comps = masked_comps[:batch_size*2].reshape(
+            batch_size, 2, self.num_slots, 3, w, h)
+        diff_view_masked_comps = masked_comps[batch_size*2:].reshape(
+            batch_size, 2, self.num_slots, 3, w, h)
+        same_view_masks = masks[batch_size*2:].reshape(batch_size, 2, self.num_slots, w, h)
+        diff_view_masks = masks[batch_size*2:].reshape(batch_size, 2, self.num_slots, w, h)
 
-        same_view_recs = reconstructions[disp_idx]
-        diff_view_recs = reconstructions[batch_size + disp_idx]
+        # Input pairs to display
+        input_disp = images_gt[:num_input_pairs].transpose(0, 1).flatten(end_dim=1)
 
-        ground_truth_imgs = imgs[disp_idx]
-
-        sample_input = torch.cat((imgs[:num_imgs],
-                                  imgs[batch_size:batch_size + num_imgs]), dim=0)
-        same_view_recs_vs_gt = torch.cat((same_view_recs, ground_truth_imgs), dim=0)
-        diff_view_recs_vs_gt = torch.cat((diff_view_recs, ground_truth_imgs), dim=0)
-
-        writer.add_image(prefix + "samples_from_recent_batch",
-                         torchvision.utils.make_grid(sample_input,
-                                                     nrow=num_imgs,
+        writer.add_image(prefix + "sample_image_pairs",
+                         torchvision.utils.make_grid(input_disp,
+                                                     nrow=num_img_pairs*2,
                                                      scale_each=False,
-                                                     normalize=True).cpu().detach().numpy(),
+                                                     normalize=True,
+                                                     range=(-1, 1)).cpu().detach().numpy(),
                          iter)
 
-        writer.add_image(prefix + "same_view_recs_vs_gt",
-                         torchvision.utils.make_grid(same_view_recs_vs_gt,
-                                                     nrow=num_imgs,
+        # Choose random reconstructions to display
+        disp_idx = sorted(np.random.choice(batch_size, num_img_pairs, replace=False))
+
+        gt_disp = images_gt[disp_idx].transpose(0, 1).flatten(end_dim=1)
+        same_view_disp = same_view_recs[disp_idx].transpose(0, 1).flatten(end_dim=1)
+        diff_view_disp = diff_view_recs[disp_idx].transpose(0, 1).flatten(end_dim=1)
+
+        gt_vs_rec_disp = torch.cat((gt_disp,
+                                    same_view_disp,
+                                    diff_view_disp), dim=0)
+
+        writer.add_image(prefix + "gt_vs_same_view_recs_vs_diff_view_recs",
+                         torchvision.utils.make_grid(gt_vs_rec_disp,
+                                                     nrow=num_img_pairs*2,
                                                      scale_each=False,
-                                                     normalize=True).cpu().detach().numpy(),
+                                                     normalize=True,
+                                                     range=(-1, 1)).cpu().detach().numpy(),
                          iter)
 
-        writer.add_image(prefix + "diff_view_recs_vs_gt",
-                         torchvision.utils.make_grid(diff_view_recs_vs_gt,
-                                                     nrow=num_imgs,
+        # Display masked components for same view reconstruction
+        # row: [num_slots + 2, 2, num_img_pairs, 3, h, w]
+        same_view_masked_comps = torch.cat((images_gt[disp_idx].unsqueeze(2),
+                                            same_view_recs[disp_idx].unsqueeze(2),
+                                            same_view_masked_comps[disp_idx]),
+                                           dim=2).transpose(0, 2)
+        diff_view_masked_comps = torch.cat((images_gt[disp_idx].unsqueeze(2),
+                                            diff_view_recs[disp_idx].unsqueeze(2),
+                                            diff_view_masked_comps[disp_idx]),
+                                           dim=2).transpose(0, 2)
+
+        writer.add_image(prefix + "same_view_masked_components",
+                         torchvision.utils.make_grid(same_view_masked_comps.reshape(-1, 3, h, w),
+                                                     nrow=num_img_pairs*2,
                                                      scale_each=False,
-                                                     normalize=True).cpu().detach().numpy(),
+                                                     normalize=True,
+                                                     range=(-1, 1)).cpu().detach().numpy(),
                          iter)
+        writer.add_image(prefix + "diff_view_masked_components",
+                         torchvision.utils.make_grid(diff_view_masked_comps.reshape(-1, 3, h, w),
+                                                     nrow=num_img_pairs*2,
+                                                     scale_each=False,
+                                                     normalize=True,
+                                                     range=(-1, 1)).cpu().detach().numpy(),
+                         iter)
+
+
+        # inp = torchvision.utils.make_grid(input_disp,
+        #                                   nrow=num_img_pairs*2,
+        #                                   scale_each=False,
+        #                                   normalize=True,
+        #                                   range=(-1, 1)).cpu().detach().numpy()
+        # recs = torchvision.utils.make_grid(gt_vs_rec_disp,
+        #                                    nrow=num_img_pairs*2,
+        #                                    scale_each=False,
+        #                                    normalize=True,
+        #                                    range=(-1, 1)).cpu().detach().numpy()
+        #
+        # svmc = torchvision.utils.make_grid(same_view_masked_comps.reshape(-1, 3, h, w),
+        #                                      nrow=num_img_pairs*2,
+        #                                      scale_each=False,
+        #                                      normalize=True,
+        #                                      range=(-1, 1)).cpu().detach().numpy()
+        # dvmc = torchvision.utils.make_grid(diff_view_masked_comps.reshape(-1, 3, h, w),
+        #                                      nrow=num_img_pairs*2,
+        #                                      scale_each=False,
+        #                                      normalize=True,
+        #                                      range=(-1, 1)).cpu().detach().numpy()
+        # plt.imshow(np.transpose(inp, (1, 2, 0)), interpolation='nearest')
+        # plt.show()
+        # plt.imshow(np.transpose(recs, (1, 2, 0)), interpolation='nearest')
+        # plt.show()
+        # plt.imshow(np.transpose(svmc, (1, 2, 0)), interpolation='nearest')
+        # plt.show()
+        # plt.imshow(np.transpose(dvmc, (1, 2, 0)), interpolation='nearest')
+        # plt.show()
+
 
     def forward(self, imgs, actions):
         """
@@ -121,15 +194,5 @@ class NodModel(nn.Module):
         # Decode embedding
         flat_state = repeated_states.reshape(-1, repeated_states.size(2))
         out = self.decoder(flat_state)
-
-        comps, masks = out[:, :3, :, :], out[:, 3, :, :]
-
-        comps = comps.view(-1, self.num_slots, comps.size(1), comps.size(2), comps.size(3))
-        masks = masks.view(-1, self.num_slots, masks.size(1), masks.size(2))
-        scaled_masks = F.softmax(masks, dim=1)
-
-        masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
-        recs = masked_comps.sum(dim=1)
-
-        return recs
+        return out
 

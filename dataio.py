@@ -12,12 +12,13 @@ from glob import glob
 class TwoViewsDataset(data.Dataset):
     """Create dataset of (I_1, I_2, T_{21}) image pairs and relative transform for each scene instance."""
 
-    def __init__(self, data_dir, num_pairs_per_instance, num_scenes=-1):
+    def __init__(self, data_dir, num_pairs_per_scene=-1, num_scenes=-1):
         """
         Args:
             data_dir (string): Path to directory containing all instances
-            num_pairs_per_instance: Number of image pairs per scene instance.
-            num_scenes: if None use all scene in dir
+            num_pairs_per_scene: Number of image pairs per scene instance.
+                                if -1 use all images for scene instance.
+            num_scenes: if -1 use all scene in dir
         """
         self.instance_dirs = sorted(glob(os.path.join(data_dir, "*/")))
         assert (len(self.instance_dirs) != 0), "No scene instances in the data directory"
@@ -39,8 +40,12 @@ class TwoViewsDataset(data.Dataset):
             scene_rgb_paths = sorted(data_util.glob_imgs(color_dir))
             scene_pose_paths = sorted(glob(os.path.join(pose_dir, "*.txt")))
 
-            self.rgb_paths += scene_rgb_paths[0:num_pairs_per_instance*2]
-            self.pose_paths += scene_pose_paths[0:num_pairs_per_instance*2]
+            if num_pairs_per_scene == -1:
+                self.rgb_paths += scene_rgb_paths
+                self.pose_paths += scene_pose_paths
+            else:
+                self.rgb_paths += scene_rgb_paths[0:num_pairs_per_scene * 2]
+                self.pose_paths += scene_pose_paths[0:num_pairs_per_scene * 2]
 
     def __len__(self):
         return len(self.rgb_paths) // 2

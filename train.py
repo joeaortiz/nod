@@ -20,7 +20,7 @@ import data_util
 import util
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch-size', type=int, default=1,
+parser.add_argument('--batch-size', type=int, default=2,
                     help='Batch size.')
 parser.add_argument('--epochs', type=int, default=50,
                     help='Number of training epochs.')
@@ -53,10 +53,24 @@ parser.add_argument('--log-interval', type=int, default=5,
 parser.add_argument('--train_dir', type=str,
                     default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/train',
                     help='Path to training dataset.')
-parser.add_argument('--num_pairs_per_instance', type=int, default=20,
+parser.add_argument('--train_pairs_per_instance', type=int, default=20,
                     help='Number of pairs of views per scene.')
-parser.add_argument('--num_scenes', type=int, default=-1,
-                    help='Number of different scene instances to use. Default is use all scenes. ')
+parser.add_argument('--num_train_scenes', type=int, default=-1,
+                    help='Number of different scene instances to use. -1 is use all scenes. ')
+
+parser.add_argument('--val_dir', type=str,
+                    default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/val',
+                    help='Path to validation dataset.')
+parser.add_argument('--val_pairs_per_scene', type=int, default=20,
+                    help='Number of pairs of views per scene.')
+parser.add_argument('--num_val_scenes', type=int, default=-1,
+                    help='Number of different scene instances to use. -1 is use all scenes. ')
+
+p.add_argument('--steps_til_val', type=int, default=200,
+               help='Number of iterations until validation set is run.')
+p.add_argument('--no_validation', action='store_true', default=False,
+               help='If no validation set should be used.')
+
 parser.add_argument('--name', type=str, default='test',
                     help='Experiment name.')
 parser.add_argument('--save-folder', type=str,
@@ -68,13 +82,20 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 device = torch.device('cuda' if args.cuda else 'cpu')
 
-dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
-                                 num_pairs_per_instance=args.num_pairs_per_instance,
-                                 num_scenes=args.num_scenes)
-train_loader = data.DataLoader(dataset, batch_size=args.batch_size,
+train_dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
+                                       num_pairs_per_scene=args.train_pairs_per_scene,
+                                       num_scenes=args.num_train_scenes)
+train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                shuffle=True, num_workers=4)
+if not args.no_validation:
+    val_dataset = dataio.TwoViewsDataset(data_dir=args.val_dir,
+                                         num_pairs_per_scene=args.val_pairs_per_scene,
+                                         num_scenes=args.num_val_scenes)
+    val_loader = data.DataLoader(val_dataset, batch_size=2,
+                                 shuffle=True, num_workers=4)
 
-print(f'Size of dataset {len(dataset)}')
+
+print(f'Size of dataset {len(train_dataset)}')
 
 # obs = train_loader.__iter__().next()
 # data_util.show_batch_pairs(obs)
@@ -131,7 +152,7 @@ writer = SummaryWriter(events_dir)
 print('Starting model training...')
 print("\n" + "#" * 10)
 print("Training for %d epochs with batch size %d and %d steps per batch"
-      % (args.epochs, args.batch_size, np.ceil(len(dataset) / args.batch_size)))
+      % (args.epochs, args.batch_size, np.ceil(len(train_dataset) / args.batch_size)))
 print("#" * 10 + "\n")
 step = 0
 best_loss = 1e9
@@ -150,7 +171,16 @@ for epoch in range(1, args.epochs + 1):
 
         optimizer.zero_grad()
 
-        recs = model(imgs, actions)
+        out = model(imgs, actions)
+        comps, masks = out[:, :3, :, :], out[:, 3, :, :]
+
+        comps = comps.view(-1, model.num_slots, comps.size(1), comps.size(2), comps.size(3))
+        masks = masks.view(-1, model.num_slots, masks.size(1), masks.size(2))
+        scaled_masks = F.softmax(masks, dim=1)
+
+        masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
+        recs = masked_comps.sum(dim=1)
+
         rec_views = recs[:args.batch_size*2]
         novel_views = recs[args.batch_size*2:]
 
@@ -159,6 +189,7 @@ for epoch in range(1, args.epochs + 1):
 
         total_loss = same_view_loss + novel_view_loss
 
+        # Backprop and optimise
         total_loss.backward()
         optimizer.step()
 
@@ -175,13 +206,55 @@ for epoch in range(1, args.epochs + 1):
         writer.add_scalar("total_loss", total_loss, step)
 
         if not step % 100:
-            model.write_updates(writer, recs, imgs, step)
+            model.write_updates(writer, recs, imgs, comps,
+                                scaled_masks, masked_comps, step)
+
+        if step % args.steps_til_val == 0 and not args.no_validation:
+            print("Running validation set...")
+
+            model.eval()
+            with torch.no_grad():
+                same_view_losses = []
+                diff_view_losses = []
+                total_losses = []
+                for i, data_batch in val_loader:
+                    img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
+                    imgs = torch.cat((img1, img2), dim=0)
+                    action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
+                    actions = torch.cat((action1, action2), dim=0)
+
+                    out = model(imgs, actions)
+                    comps, masks = out[:, :3, :, :], out[:, 3, :, :]
+
+                    comps = comps.view(-1, model.num_slots, comps.size(1), comps.size(2), comps.size(3))
+                    masks = masks.view(-1, model.num_slots, masks.size(1), masks.size(2))
+                    scaled_masks = F.softmax(masks, dim=1)
+
+                    masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
+                    recs = masked_comps.sum(dim=1)
+
+                    rec_views = recs[:args.batch_size * 2]
+                    novel_views = recs[args.batch_size * 2:]
+
+                    same_view_loss = l2_loss(rec_views, imgs)
+                    novel_view_loss = l2_loss(novel_views, imgs)
+                    total_loss = same_view_loss + novel_view_loss
+                    same_view_losses.append(same_view_loss)
+                    diff_view_losses.append(novel_view_loss)
+                    total_losses.append(total_loss)
+
+                model.write_updates(writer, recs, imgs, comps,
+                                    scaled_masks, masked_comps, step, prefix='val_')
+
+                writer.add_scalar("val_same_view_loss", np.mean(same_view_losses), step)
+                writer.add_scalar("val_diff_view_loss", np.mean(diff_view_losses), step)
+                writer.add_scalar("val_total_loss", np.mean(total_losses), step)
+            model.train()
 
         step += 1
 
         break
     break
-
 
     avg_loss = train_loss / len(train_loader.dataset)
     print('====> Epoch: {} Average loss: {:.6f}'.format(
