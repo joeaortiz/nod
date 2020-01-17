@@ -20,7 +20,7 @@ import data_util
 import util
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch-size', type=int, default=10,
+parser.add_argument('--batch-size', type=int, default=1,
                     help='Batch size.')
 parser.add_argument('--epochs', type=int, default=50,
                     help='Number of training epochs.')
@@ -51,9 +51,9 @@ parser.add_argument('--log-interval', type=int, default=5,
                          'training status.')
 
 parser.add_argument('--train_dir', type=str,
-                    default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/edgar',
+                    default='/mnt/sda/clevr-dataset-gen-1/manyviews/scenes/train',
                     help='Path to training dataset.')
-parser.add_argument('--num_pairs_per_instance', type=int, default=10,
+parser.add_argument('--num_pairs_per_instance', type=int, default=20,
                     help='Number of pairs of views per scene.')
 parser.add_argument('--name', type=str, default='test',
                     help='Experiment name.')
@@ -147,12 +147,13 @@ writer = SummaryWriter(events_dir)
 # Train model.
 print('Starting model training...')
 print("\n" + "#" * 10)
-print("Training for %d epochs with batch size %d" % (args.epochs, args.batch_size))
+print("Training for %d epochs with batch size %d and %d steps per batch"
+      % (args.epochs, args.batch_size, np.ceil(len(dataset) / args.batch_size)))
 print("#" * 10 + "\n")
 step = 0
 best_loss = 1e9
 
-criterion = nn.MSELoss(reduction="mean")
+l2_loss = nn.MSELoss(reduction="mean")
 
 for epoch in range(1, args.epochs + 1):
     model.train()
@@ -161,41 +162,43 @@ for epoch in range(1, args.epochs + 1):
     for batch_idx, data_batch in enumerate(train_loader):
         img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
         imgs = torch.cat((img1, img2), dim=0)
+        action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
+        actions = torch.cat((action1, action2), dim=0)
 
         optimizer.zero_grad()
 
-        recs = model(imgs)
+        recs = model(imgs, actions)
+        rec_views = recs[:args.batch_size*2]
+        novel_views = recs[args.batch_size*2:]
 
-        # Decode embedding
-        # flat_state = state.reshape(-1, state.size(2))
-        # comps, masks = model.decoder(flat_state)
+        same_view_loss = l2_loss(rec_views, imgs)
+        novel_view_loss = l2_loss(novel_views, imgs)
 
-        # comps = comps.view(-1, self.num_slots, comps.size(1), comps.size(2), comps.size(3))
-        # masks = masks.view(-1, self.num_slots, masks.size(1), masks.size(2))
-        # scaled_masks = F.softmax(masks, dim=1)
-        #
-        # masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
-        # recs = masked_comps.sum(dim=1)
+        total_loss = same_view_loss + novel_view_loss
 
-        # l2_loss = model.get_pixel_loss(recs, imgs)
+        total_loss.backward()
+        optimizer.step()
 
-        # total_loss = l2_loss
-        # target = torch.zeros_like(recs).to(device)
-        # total_loss = criterion(recs, target)
-        #
-        # total_loss.backward()
-        # optimizer.step()
-        #
-        # train_loss += total_loss.item()
-        total_loss = 0.
+        train_loss += total_loss.item()
 
         if batch_idx % args.log_interval == 0:
-            print(f" Epoch {epoch:03d}   Iter {step:07d}  Loss {total_loss:06f} ")
+            print(f" Epoch {epoch:03d}   Iter {step:07d} | " +
+                  f"Same View Loss {same_view_loss.item():06f} | " +
+                  f"Novel View Loss {novel_view_loss.item():06f} | " +
+                  f"Total Loss {total_loss.item():06f}  ")
 
-        # writer.add_scalar("total_loss", total_loss, step)
-        # model.write_updates(writer, recs, data_batch, step)
-        #
+        writer.add_scalar("same_view_loss", same_view_loss, step)
+        writer.add_scalar("novel_view_loss", novel_view_loss, step)
+        writer.add_scalar("total_loss", total_loss, step)
+
+        if not step % 100:
+            model.write_updates(writer, recs, imgs, step)
+
         step += 1
+
+        break
+    break
+
 
     avg_loss = train_loss / len(train_loader.dataset)
     print('====> Epoch: {} Average loss: {:.6f}'.format(

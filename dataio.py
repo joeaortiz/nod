@@ -50,10 +50,12 @@ class TwoViewsDataset(data.Dataset):
         pose1 = data_util.load_pose(self.pose_paths[idx*2])
         pose2 = data_util.load_pose(self.pose_paths[idx*2 + 1])
         transf21 = pose2 @ np.linalg.inv(pose1)
+        transf12 = np.linalg.inv(transf21)
 
         sample = {
             'image1': img1,
             'image2': img2,
-            'relative_pose': transf21.flatten()[:12]
+            'transf21': transf21.flatten()[:12],
+            'transf12': transf12.flatten()[:12]
         }
         return sample
