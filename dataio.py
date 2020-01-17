@@ -12,13 +12,18 @@ from glob import glob
 class TwoViewsDataset(data.Dataset):
     """Create dataset of (I_1, I_2, T_{21}) image pairs and relative transform for each scene instance."""
 
-    def __init__(self, data_dir, num_pairs_per_instance):
+    def __init__(self, data_dir, num_pairs_per_instance, num_scenes=-1):
         """
         Args:
-            instances_dir (string): Path to directory containing all instances
+            data_dir (string): Path to directory containing all instances
+            num_pairs_per_instance: Number of image pairs per scene instance.
+            num_scenes: if None use all scene in dir
         """
         self.instance_dirs = sorted(glob(os.path.join(data_dir, "*/")))
-        assert (len(self.instance_dirs) != 0), "No objects in the data directory"
+        assert (len(self.instance_dirs) != 0), "No scene instances in the data directory"
+
+        if num_scenes != -1:
+            self.instance_dirs = self.instance_dirs[:num_scenes]
 
         self.rgb_paths = []
         self.pose_paths = []

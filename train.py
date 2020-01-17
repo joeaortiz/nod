@@ -55,6 +55,8 @@ parser.add_argument('--train_dir', type=str,
                     help='Path to training dataset.')
 parser.add_argument('--num_pairs_per_instance', type=int, default=20,
                     help='Number of pairs of views per scene.')
+parser.add_argument('--num_scenes', type=int, default=-1,
+                    help='Number of different scene instances to use. Default is use all scenes. ')
 parser.add_argument('--name', type=str, default='test',
                     help='Experiment name.')
 parser.add_argument('--save-folder', type=str,
@@ -67,7 +69,8 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
-                                 num_pairs_per_instance=args.num_pairs_per_instance)
+                                 num_pairs_per_instance=args.num_pairs_per_instance,
+                                 num_scenes=args.num_scenes)
 train_loader = data.DataLoader(dataset, batch_size=args.batch_size,
                                shuffle=True, num_workers=4)
 
@@ -86,26 +89,6 @@ model = model.NodModel(
     encoder=args.encoder,
     decoder=args.decoder)
 model.to(device)
-
-# class Net(nn.Module):
-#     def __init__(self):
-#         super(Net, self).__init__()
-#         self.conv1 = nn.Conv2d(3, 6, 5)
-#         self.pool = nn.MaxPool2d(2, 2)
-#         self.conv2 = nn.Conv2d(6, 16, 5)
-#         self.fc1 = nn.Linear(16 * 29 * 29, 120)
-#         self.fc2 = nn.Linear(120, 84)
-#         self.fc3 = nn.Linear(84, 10)
-#
-#     def forward(self, x):
-#         x = self.pool(F.relu(self.conv1(x)))
-#         x = self.pool(F.relu(self.conv2(x)))
-#         x = x.view(-1, 16 * 29 * 29)
-#         x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
-#         x = self.fc3(x)
-#         return x
-# model = Net().to(device)
 
 model.apply(util.weights_init)
 
