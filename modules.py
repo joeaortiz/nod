@@ -157,6 +157,9 @@ class TransitionGNN(torch.nn.Module):
         action_vec = action.repeat(1, self.num_objects)
         action_vec = action_vec.view(-1, self.action_dim)
 
+        # print(action_vec.shape)
+        # print(action_vec)
+
         # Attach action to each state
         node_attr = torch.cat([node_attr, action_vec], dim=-1)
 

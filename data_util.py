@@ -60,3 +60,93 @@ def show_batch_pairs(batch):
     npimg = img.numpy()
     plt.imshow(np.transpose(npimg, (1, 2, 0)), interpolation='nearest')
     plt.show()
+
+def normalize(x: np.ndarray) -> np.ndarray:
+    assert x.ndim == 1, 'x must be a vector (ndim: 1)'
+    return x / np.linalg.norm(x)
+
+
+def look_at(
+    eye,
+    target,
+    up,
+) -> np.ndarray:
+    """Returns transformation matrix with eye, at and up.
+    Parameters
+    ----------
+    eye: (3,) float
+        Camera position.
+    target: (3,) float
+        Camera look_at position.
+    up: (3,) float
+        Vector that defines y-axis of camera (z-axis is vector from eye to at).
+    Returns
+    -------
+    T_cam2world: (4, 4) float (if return_homography is True)
+        Homography transformation matrix from camera to world.
+        Points are transformed like below:
+            # x: camera coordinate, y: world coordinate
+            y = trimesh.transforms.transform_points(x, T_cam2world)
+            x = trimesh.transforms.transform_points(
+                y, np.linalg.inv(T_cam2world)
+            )
+    """
+    eye = np.asarray(eye, dtype=float)
+
+    if target is None:
+        target = np.array([0, 0, 0], dtype=float)
+    else:
+        target = np.asarray(target, dtype=float)
+
+    if up is None:
+        up = np.array([0, 0, -1], dtype=float)
+    else:
+        up = np.asarray(up, dtype=float)
+
+    assert eye.shape == (3,), 'eye must be (3,) float'
+    assert target.shape == (3,), 'target must be (3,) float'
+    assert up.shape == (3,), 'up must be (3,) float'
+
+    # create new axes
+    z_axis = normalize(target - eye)
+    x_axis = normalize(np.cross(up, z_axis))
+    y_axis = normalize(np.cross(z_axis, x_axis))
+
+    # create rotation matrix: [bs, 3, 3]
+    R = np.vstack((x_axis, y_axis, z_axis))
+    t = eye
+
+    T_cam2world = np.zeros([4, 4])
+    T_cam2world[:3, :3] = R.T
+    T_cam2world[:3, 3] = t
+    T_cam2world[3, 3] = 1.
+    return T_cam2world
+
+
+def gen_pose_circle(ref_pose, n_poses, centre=[0., 0., 0.]):
+    """ Generate poses in a circle around the origin which go through the given pose.
+        Poses are generated with equal polar angle to the reference pose and uniformly
+        sampled azimuthal angles.
+        phi is azimuthal angle.
+        theta is polar angle. """
+
+    ref_loc = ref_pose[:3, 3]
+    r = np.linalg.norm(ref_loc)  # radial distance
+    ref_theta = np.arccos(ref_loc[2] / r)
+    ref_phi = np.arctan(ref_loc[1] / ref_loc[0])
+
+    # print(ref_loc, r)
+    # print(ref_phi * 180 / np.pi)
+    # print(ref_theta * 180 / np.pi)
+
+    poses = []
+    sampled_phis = np.linspace(0, 2 * np.pi - 0.05 / n_poses, n_poses)  # Don't sample right up to 2*pi
+    for phi in sampled_phis:
+        loc = np.array([r * np.sin(ref_theta) * np.cos(phi),
+                        r * np.sin(ref_theta) * np.sin(phi),
+                        r * np.cos(ref_theta)])
+        poses.append(look_at(loc,
+                             centre,
+                             np.array([0., 0., 1.])).astype(float))
+
+    return poses

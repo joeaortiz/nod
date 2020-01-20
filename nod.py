@@ -60,6 +60,23 @@ class NodModel(nn.Module):
 
         return self.l2_loss(predicted, target)
 
+    def compose_image(self, model_out):
+        """
+        Compose the image using the output of the model forward pass.
+        :param model_out: output of forward pass of model.
+        :return: masks, masked image components and the full reconstruction.
+        """
+        comps, raw_masks = model_out[:, :3, :, :], model_out[:, 3, :, :]
+
+        comps = comps.view(-1, self.num_slots, comps.size(1), comps.size(2), comps.size(3))
+        raw_masks = raw_masks.view(-1, self.num_slots, raw_masks.size(1), raw_masks.size(2))
+        masks = F.softmax(raw_masks, dim=1)
+
+        masked_comps = torch.mul(masks.unsqueeze(2), comps)
+        recs = masked_comps.sum(dim=1)
+
+        return masks, masked_comps, recs
+
     def write_updates(self, writer, reconstructions, images_gt, comps, masks, masked_comps,
                       iter, prefix="", num_img_pairs=3, num_input_pairs=10):
         """ Writes tensorboard summaries using tensorboardx api.
@@ -74,16 +91,22 @@ class NodModel(nn.Module):
         same_view_recs = reconstructions[:batch_size*2].reshape(batch_size, 2, 3, w, h)
         diff_view_recs = reconstructions[batch_size*2:].reshape(batch_size, 2, 3, w, h)
 
-        same_view_comps = comps[:batch_size*2].reshape(
-            batch_size, 2, self.num_slots, 3, w, h)
-        diff_view_comps = comps[batch_size*2:].reshape(
-            batch_size, 2, self.num_slots, 3, w, h)
+        # same_view_comps = comps[:batch_size*2].reshape(
+        #     batch_size, 2, self.num_slots, 3, w, h)
+        # diff_view_comps = comps[batch_size*2:].reshape(
+        #     batch_size, 2, self.num_slots, 3, w, h)
         same_view_masked_comps = masked_comps[:batch_size*2].reshape(
             batch_size, 2, self.num_slots, 3, w, h)
         diff_view_masked_comps = masked_comps[batch_size*2:].reshape(
             batch_size, 2, self.num_slots, 3, w, h)
         same_view_masks = masks[batch_size*2:].reshape(batch_size, 2, self.num_slots, w, h)
         diff_view_masks = masks[batch_size*2:].reshape(batch_size, 2, self.num_slots, w, h)
+        # Expand to have 3 channels so can concat with rgb images
+        same_view_masks = same_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
+        diff_view_masks = diff_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
+        # Shift to be in range [-1, 1] like rgb
+        same_view_masks = same_view_masks * 2 - 1
+        diff_view_masks = diff_view_masks * 2 - 1
 
         # Input pairs to display
         input_disp = images_gt[:num_input_pairs].transpose(0, 1).flatten(end_dim=1)
@@ -115,15 +138,16 @@ class NodModel(nn.Module):
                                                      range=(-1, 1)).cpu().detach().numpy(),
                          iter)
 
-        # Display masked components for same view reconstruction
-        # row: [num_slots + 2, 2, num_img_pairs, 3, h, w]
+        # Display masked components
         same_view_masked_comps = torch.cat((images_gt[disp_idx].unsqueeze(2),
                                             same_view_recs[disp_idx].unsqueeze(2),
-                                            same_view_masked_comps[disp_idx]),
+                                            same_view_masked_comps[disp_idx],
+                                            same_view_masks[disp_idx]),
                                            dim=2).transpose(0, 2)
         diff_view_masked_comps = torch.cat((images_gt[disp_idx].unsqueeze(2),
                                             diff_view_recs[disp_idx].unsqueeze(2),
-                                            diff_view_masked_comps[disp_idx]),
+                                            diff_view_masked_comps[disp_idx],
+                                            diff_view_masks[disp_idx]),
                                            dim=2).transpose(0, 2)
 
         writer.add_image(prefix + "same_view_masked_components",
@@ -141,38 +165,6 @@ class NodModel(nn.Module):
                                                      range=(-1, 1)).cpu().detach().numpy(),
                          iter)
 
-
-        # inp = torchvision.utils.make_grid(input_disp,
-        #                                   nrow=num_img_pairs*2,
-        #                                   scale_each=False,
-        #                                   normalize=True,
-        #                                   range=(-1, 1)).cpu().detach().numpy()
-        # recs = torchvision.utils.make_grid(gt_vs_rec_disp,
-        #                                    nrow=num_img_pairs*2,
-        #                                    scale_each=False,
-        #                                    normalize=True,
-        #                                    range=(-1, 1)).cpu().detach().numpy()
-        #
-        # svmc = torchvision.utils.make_grid(same_view_masked_comps.reshape(-1, 3, h, w),
-        #                                      nrow=num_img_pairs*2,
-        #                                      scale_each=False,
-        #                                      normalize=True,
-        #                                      range=(-1, 1)).cpu().detach().numpy()
-        # dvmc = torchvision.utils.make_grid(diff_view_masked_comps.reshape(-1, 3, h, w),
-        #                                      nrow=num_img_pairs*2,
-        #                                      scale_each=False,
-        #                                      normalize=True,
-        #                                      range=(-1, 1)).cpu().detach().numpy()
-        # plt.imshow(np.transpose(inp, (1, 2, 0)), interpolation='nearest')
-        # plt.show()
-        # plt.imshow(np.transpose(recs, (1, 2, 0)), interpolation='nearest')
-        # plt.show()
-        # plt.imshow(np.transpose(svmc, (1, 2, 0)), interpolation='nearest')
-        # plt.show()
-        # plt.imshow(np.transpose(dvmc, (1, 2, 0)), interpolation='nearest')
-        # plt.show()
-
-
     def forward(self, imgs, actions):
         """
         Foward pass of model.
@@ -186,13 +178,13 @@ class NodModel(nn.Module):
 
         transf_state = self.transition_model(state, actions)
 
-        # state: [B*4, num_slots, embedding_dim]
+        # repeated_states: [B*4, num_slots, embedding_dim]
         repeated_states = torch.cat((state,
                                      transf_state[:batch_size],
                                      transf_state[batch_size:]))
 
         # Decode embedding
-        flat_state = repeated_states.reshape(-1, repeated_states.size(2))
+        flat_state = repeated_states.reshape(-1, self.embedding_dim)
         out = self.decoder(flat_state)
         return out
 

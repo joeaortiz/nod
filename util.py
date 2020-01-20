@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+from glob import glob
 
 import torch
 from torch.utils import data
@@ -45,3 +46,16 @@ def weights_init(m):
     if isinstance(m, nn.Linear):
         nn.init.xavier_uniform_(m.weight)
         nn.init.zeros_(m.bias)
+
+
+def custom_load(model, path):
+    # Load from latest checkpoint
+    if os.path.isdir(path):
+        checkpoint_path = sorted(glob(os.path.join(path, "*.pth")))[-1]
+    else:
+        checkpoint_path = path
+
+    model.load_state_dict(torch.load(checkpoint_path))
+
+    # for param_tensor in torch.load(checkpoint_path):
+    #     print(param_tensor, "\t", torch.load(checkpoint_path)[param_tensor].size())

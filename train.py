@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 import dataio
-import model
+import nod
 import data_util
 import util
 
@@ -104,7 +104,7 @@ print(f'Size of dataset {len(train_dataset)}')
 # input_shape = obs['image1'].size()[1:]
 input_shape = torch.Size([3, 128, 128])
 
-model = model.NodModel(
+model = nod.NodModel(
     embedding_dim=args.embedding_dim,
     input_dims=input_shape,
     hidden_dim=args.hidden_dim,
@@ -174,14 +174,7 @@ for epoch in range(1, args.epochs + 1):
         optimizer.zero_grad()
 
         out = model(imgs, actions)
-        comps, masks = out[:, :3, :, :], out[:, 3, :, :]
-
-        comps = comps.view(-1, model.num_slots, comps.size(1), comps.size(2), comps.size(3))
-        masks = masks.view(-1, model.num_slots, masks.size(1), masks.size(2))
-        scaled_masks = F.softmax(masks, dim=1)
-
-        masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
-        recs = masked_comps.sum(dim=1)
+        masks, masked_comps, recs = model.compose_image(out)
 
         rec_views = recs[:args.batch_size*2]
         novel_views = recs[args.batch_size*2:]
@@ -226,20 +219,14 @@ for epoch in range(1, args.epochs + 1):
                     actions = torch.cat((action1, action2), dim=0)
 
                     out = model(imgs, actions)
-                    comps, masks = out[:, :3, :, :], out[:, 3, :, :]
-
-                    comps = comps.view(-1, model.num_slots, comps.size(1), comps.size(2), comps.size(3))
-                    masks = masks.view(-1, model.num_slots, masks.size(1), masks.size(2))
-                    scaled_masks = F.softmax(masks, dim=1)
-
-                    masked_comps = torch.mul(scaled_masks.unsqueeze(2), comps)
-                    recs = masked_comps.sum(dim=1)
+                    masks, masked_comps, recs = model.compose_image(out)
 
                     rec_views = recs[:2 * 2]
                     novel_views = recs[2 * 2:]
 
                     same_view_loss = l2_loss(rec_views, imgs)
                     novel_view_loss = l2_loss(novel_views, imgs)
+
                     total_loss = same_view_loss + novel_view_loss
                     same_view_losses.append(same_view_loss.item())
                     diff_view_losses.append(novel_view_loss.item())
