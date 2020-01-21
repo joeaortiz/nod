@@ -61,6 +61,7 @@ def show_batch_pairs(batch):
     plt.imshow(np.transpose(npimg, (1, 2, 0)), interpolation='nearest')
     plt.show()
 
+
 def normalize(x: np.ndarray) -> np.ndarray:
     assert x.ndim == 1, 'x must be a vector (ndim: 1)'
     return x / np.linalg.norm(x)
@@ -123,6 +124,25 @@ def look_at(
     return T_cam2world
 
 
+def cswm_look_at(vec_pos, vec_look_at):
+    z = vec_look_at - vec_pos
+    z = z / np.linalg.norm(z)
+
+    x = np.cross(z, np.array([0., 1., 0.]))
+    x = x / np.linalg.norm(x)
+
+    y = np.cross(x, z)
+    y = y / np.linalg.norm(y)
+
+    view_mat = np.zeros((3, 3))
+
+    view_mat[:3, 0] = x
+    view_mat[:3, 1] = y
+    view_mat[:3, 2] = z
+
+    return view_mat
+
+
 def gen_pose_circle(ref_pose, n_poses, centre=[0., 0., 0.]):
     """ Generate poses in a circle around the origin which go through the given pose.
         Poses are generated with equal polar angle to the reference pose and uniformly
@@ -130,23 +150,38 @@ def gen_pose_circle(ref_pose, n_poses, centre=[0., 0., 0.]):
         phi is azimuthal angle.
         theta is polar angle. """
 
+    print('ref pose\n', ref_pose)
+
     ref_loc = ref_pose[:3, 3]
     r = np.linalg.norm(ref_loc)  # radial distance
     ref_theta = np.arccos(ref_loc[2] / r)
-    ref_phi = np.arctan(ref_loc[1] / ref_loc[0])
+    if ref_loc[0] > 0:
+        ref_phi = np.arctan(ref_loc[1] / ref_loc[0])
+    else:
+        ref_phi = np.arctan(ref_loc[1] / ref_loc[0]) + np.pi
 
-    # print(ref_loc, r)
-    # print(ref_phi * 180 / np.pi)
-    # print(ref_theta * 180 / np.pi)
+    print(ref_loc, r)
+    print('ref phi', ref_phi )
+    # print(ref_phi * 180 / np.pi % (360))
+    print('ref theta', ref_theta)
 
     poses = []
-    sampled_phis = np.linspace(0, 2 * np.pi - 0.05 / n_poses, n_poses)  # Don't sample right up to 2*pi
+    # Don't sample right up to 2*pi
+    sampled_phis = (np.linspace(0, 2 * np.pi - 0.01, n_poses) + ref_phi)
+    # print(sampled_phis)
     for phi in sampled_phis:
+        print('\n\nphi and theta', phi, ref_theta)
         loc = np.array([r * np.sin(ref_theta) * np.cos(phi),
                         r * np.sin(ref_theta) * np.sin(phi),
                         r * np.cos(ref_theta)])
+        print(loc)
         poses.append(look_at(loc,
                              centre,
                              np.array([0., 0., 1.])).astype(float))
+        print('comparing look at funcs')
+        print(look_at(loc,
+                     centre,
+                     np.array([0., 0., 1.])).astype(float))
+        print(cswm_look_at(loc, centre))
 
     return poses

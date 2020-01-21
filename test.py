@@ -42,7 +42,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--save_out_first_n', type=int, default=50,
                     help='Only saves images of first n instances.')
 parser.add_argument('--circle_source_img_path', type=str, default=None,
-                    help='Path to source image(s) from which circle of views around objects are generated. ')
+                    help='Path(s) to source image(s) from which circle of views around objects are generated. ')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -125,6 +125,7 @@ def test():
             print(f"Number input images {batch_idx * args.batch_size}  |  Running l2 loss: {np.mean(total_losses)}")
 
             if batch_idx * args.batch_size < args.save_out_first_n:
+
                 rec_views = rec_views.reshape(args.batch_size, 2, 3, w, h)
                 novel_views = novel_views.reshape(args.batch_size, 2, 3, w, h)
                 same_view_masked_comps = masked_comps[:args.batch_size * 2].reshape(
@@ -182,14 +183,10 @@ def test():
                     plt.imsave(os.path.join(dv_comps_dir, f'{i + batch_idx * args.batch_size:04d}.png'),
                                np.transpose(comps_diff_view_images, (1, 2, 0)))
 
-            if batch_idx == 3:
-                break
+            # if batch_idx == 3:
+            break
 
-        if isinstance(args.circle_source_img_path, str):
-            img_paths = [args.circle_source_img_path]
-        else:
-            img_paths = args.circle_source_img_path
-        save_circles(model, args.results_dir, img_paths)
+        save_circles(model, args.results_dir, args.circle_source_img_path.split())
 
     with open(os.path.join(args.results_dir, "results.txt"), "w") as out_file:
         out_file.write("Evaluation Metric: score \n\n")
@@ -197,16 +194,16 @@ def test():
         out_file.write(f"Diff view rec l2 loss: {np.mean(diff_view_losses):10f} \n")
         out_file.write(f"Rec l2 loss: {np.mean(total_losses):10f} \n")
 
-    print("Final score: ")
+    print("\nFinal score: ")
 
 
-def save_circles(model, results_dir, *img_paths, num_renders=10):
+def save_circles(model, results_dir, img_paths, num_renders=50):
     circles_dir = os.path.join(results_dir, 'circles')
     util.cond_mkdir(circles_dir)
 
     print('Generating circle views around scene')
 
-    for j, img_path in enumerate(img_paths[0]):
+    for j, img_path in enumerate(img_paths):
         circle_dir = os.path.join(circles_dir, f'{j:03d}')
         util.cond_mkdir(circle_dir)
         # Copy reference image into directory
@@ -224,8 +221,6 @@ def save_circles(model, results_dir, *img_paths, num_renders=10):
             actions[i] = (np.linalg.inv(target_pose) @ ref_pose).flatten()[:12]
         actions = torch.from_numpy(actions).float().to(device)
 
-        print(actions)
-
         with torch.no_grad():
             state = model.encoder(img)
             state = state.repeat(num_renders, 1, 1)
@@ -240,6 +235,7 @@ def save_circles(model, results_dir, *img_paths, num_renders=10):
                                              os.path.join(circle_dir, f'{i+1:04d}.png'),
                                              normalize=True,
                                              range=(-1, 1))
+        print('Saved one circle view.')
 
 
 def main():

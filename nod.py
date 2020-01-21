@@ -36,7 +36,8 @@ class NodModel(nn.Module):
         self.transition_model = modules.TransitionGNN(input_dim=self.embedding_dim,
                                                       hidden_dim=512,
                                                       action_dim=12,
-                                                      num_objects=self.num_slots)
+                                                      num_objects=self.num_slots,
+                                                      residual=True)
 
         if decoder == 'broadcast':
             self.decoder = modules.BroadcastDecoder(latent_dim=self.embedding_dim,
@@ -104,7 +105,7 @@ class NodModel(nn.Module):
         # Expand to have 3 channels so can concat with rgb images
         same_view_masks = same_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
         diff_view_masks = diff_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
-        # Shift to be in range [-1, 1] like rgb
+        # Shift masks to be in range [-1, 1] like rgb
         same_view_masks = same_view_masks * 2 - 1
         diff_view_masks = diff_view_masks * 2 - 1
 
@@ -168,23 +169,26 @@ class NodModel(nn.Module):
     def forward(self, imgs, actions):
         """
         Foward pass of model.
-        :param imgs: two sets of views concatenated.
+        :param imgs: two sets of views concatenated [2*B, 3, 128, 128].
         :param actions: relative transformations to condition transition model.
         :return: Reconstructed images of samples.
         """
         batch_size = imgs.size(0) // 2
-        # state: [B*2, num_slots, embedding_dim]
+        # state, transf_state: [B*2, num_slots, embedding_dim]
         state = self.encoder(imgs)
+        duplicated_state = state.repeat(2, 1, 1)
 
-        transf_state = self.transition_model(state, actions)
+        actions = torch.cat((torch.zeros_like(actions), actions), dim=0)
+        transformed_state = self.transition_model(duplicated_state, actions)
+        # duplicated_state: [B*4, num_slots, embedding_dim]
 
-        # repeated_states: [B*4, num_slots, embedding_dim]
-        repeated_states = torch.cat((state,
-                                     transf_state[:batch_size],
-                                     transf_state[batch_size:]))
+        # Swap order of transformed states so transformed images are reconstructed
+        # in same order as input images.
+        transformed_state = torch.cat((transformed_state[:batch_size*2],
+                                       transformed_state[batch_size*3:],
+                                       transformed_state[batch_size*2:batch_size*3]), dim=0)
 
         # Decode embedding
-        flat_state = repeated_states.reshape(-1, self.embedding_dim)
-        out = self.decoder(flat_state)
+        out = self.decoder(transformed_state.reshape(-1, self.embedding_dim))
         return out
 

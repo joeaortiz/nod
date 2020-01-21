@@ -10,4 +10,4 @@ num_val_scenes: 1
 batch_size: 12
 epochs: 2000
 
-name: one_scene_nv
+name: one_scene_res

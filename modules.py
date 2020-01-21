@@ -48,13 +48,14 @@ class EncoderCSWM(nn.Module):
 class TransitionGNN(torch.nn.Module):
     """GNN-based transition function."""
     def __init__(self, input_dim, hidden_dim, action_dim, num_objects,
-                 act_fn='relu'):
+                 residual=True, act_fn='relu'):
         super(TransitionGNN, self).__init__()
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.num_objects = num_objects
         self.action_dim = action_dim
+        self.residual = residual
 
         self.edge_mlp = nn.Sequential(
             nn.Linear(input_dim*2, hidden_dim),
@@ -90,6 +91,7 @@ class TransitionGNN(torch.nn.Module):
         return self.edge_mlp(out)
 
     def _node_model(self, node_attr, edge_index, edge_attr):
+        res = node_attr
         if edge_attr is not None:
             row, col = edge_index
             agg = util.unsorted_segment_sum(
@@ -97,7 +99,10 @@ class TransitionGNN(torch.nn.Module):
             out = torch.cat([node_attr, agg], dim=1)
         else:
             out = node_attr
-        return self.node_mlp(out)
+        if self.residual:
+            return self.node_mlp(out) + res[:, :self.input_dim]
+        else:
+            return self.node_mlp(out)
 
     def _get_edge_list_fully_connected(self, batch_size, num_objects, cuda):
         # Only re-evaluate if necessary (e.g. if batch size changed).

@@ -90,10 +90,11 @@ train_dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
 train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                shuffle=True, num_workers=4)
 if not args.no_validation:
+    val_batch_size = 2
     val_dataset = dataio.TwoViewsDataset(data_dir=args.val_dir,
                                          num_pairs_per_scene=args.val_pairs_per_scene,
                                          num_scenes=args.num_val_scenes)
-    val_loader = data.DataLoader(val_dataset, batch_size=2,
+    val_loader = data.DataLoader(val_dataset, batch_size=val_batch_size,
                                  shuffle=True, num_workers=4)
 
 
@@ -168,7 +169,6 @@ for epoch in range(1, args.epochs + 1):
     for batch_idx, data_batch in enumerate(train_loader):
         img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
         imgs = torch.cat((img1, img2), dim=0)
-        imgs_swapped = torch.cat((img2, img1), dim=0)
         action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
         actions = torch.cat((action1, action2), dim=0)
 
@@ -181,7 +181,7 @@ for epoch in range(1, args.epochs + 1):
         novel_views = recs[args.batch_size*2:]
 
         same_view_loss = l2_loss(rec_views, imgs)
-        novel_view_loss = l2_loss(novel_views, imgs_swapped)
+        novel_view_loss = l2_loss(novel_views, imgs)
 
         total_loss = same_view_loss + novel_view_loss
 
@@ -213,17 +213,17 @@ for epoch in range(1, args.epochs + 1):
                 same_view_losses = []
                 diff_view_losses = []
                 total_losses = []
-                for data_batch in val_loader:
-                    img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
+                for val_batch in val_loader:
+                    img1, img2 = val_batch['image1'].to(device), val_batch['image2'].to(device)
                     imgs = torch.cat((img1, img2), dim=0)
-                    action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
+                    action1, action2 = val_batch['transf21'].to(device), val_batch['transf12'].to(device)
                     actions = torch.cat((action1, action2), dim=0)
 
                     out = model(imgs, actions)
                     masks, masked_comps, recs = model.compose_image(out)
 
-                    rec_views = recs[:2 * 2]
-                    novel_views = recs[2 * 2:]
+                    rec_views = recs[:val_batch_size * 2]
+                    novel_views = recs[val_batch_size * 2:]
 
                     same_view_loss = l2_loss(rec_views, imgs)
                     novel_view_loss = l2_loss(novel_views, imgs)
@@ -243,6 +243,8 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
+        break
+    break
 
     avg_loss = train_loss / len(train_loader.dataset)
     print('====> Epoch: {} Average loss: {:.6f}'.format(
