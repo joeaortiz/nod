@@ -203,7 +203,7 @@ for epoch in range(1, args.epochs + 1):
 
         if not step % 100:
             model.write_updates(writer, recs, imgs,
-                                scaled_masks, masked_comps, step)
+                                masks, masked_comps, step)
 
         if step % args.steps_til_val == 0 and not args.no_validation:
             print("Running validation set...")
