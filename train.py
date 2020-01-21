@@ -168,6 +168,7 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
+        batch_size = img1.shape[0]
         imgs = torch.cat((img1, img2), dim=0)
         action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
         actions = torch.cat((action1, action2), dim=0)
@@ -177,8 +178,8 @@ for epoch in range(1, args.epochs + 1):
         out = model(imgs, actions)
         masks, masked_comps, recs = model.compose_image(out)
 
-        rec_views = recs[:args.batch_size*2]
-        novel_views = recs[args.batch_size*2:]
+        rec_views = recs[:batch_size*2]
+        novel_views = recs[batch_size*2:]
 
         same_view_loss = l2_loss(rec_views, imgs)
         novel_view_loss = l2_loss(novel_views, imgs)
@@ -215,6 +216,7 @@ for epoch in range(1, args.epochs + 1):
                 total_losses = []
                 for val_batch in val_loader:
                     img1, img2 = val_batch['image1'].to(device), val_batch['image2'].to(device)
+                    val_batch_size = img1.shape[0]
                     imgs = torch.cat((img1, img2), dim=0)
                     action1, action2 = val_batch['transf21'].to(device), val_batch['transf12'].to(device)
                     actions = torch.cat((action1, action2), dim=0)
@@ -242,9 +244,6 @@ for epoch in range(1, args.epochs + 1):
             model.train()
 
         step += 1
-
-        break
-    break
 
     avg_loss = train_loss / len(train_loader.dataset)
     print('====> Epoch: {} Average loss: {:.6f}'.format(

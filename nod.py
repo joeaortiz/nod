@@ -178,6 +178,11 @@ class NodModel(nn.Module):
         state = self.encoder(imgs)
         duplicated_state = state.repeat(2, 1, 1)
 
+        identity_action = torch.zeros_like(actions)
+        identity_action[:, 0] = 1.
+        identity_action[:, 5] = 1.
+        identity_action[:, 10] = 1.
+
         actions = torch.cat((torch.zeros_like(actions), actions), dim=0)
         transformed_state = self.transition_model(duplicated_state, actions)
         # duplicated_state: [B*4, num_slots, embedding_dim]

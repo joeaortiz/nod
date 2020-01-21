@@ -149,9 +149,6 @@ def gen_pose_circle(ref_pose, n_poses, centre=[0., 0., 0.]):
         sampled azimuthal angles.
         phi is azimuthal angle.
         theta is polar angle. """
-
-    print('ref pose\n', ref_pose)
-
     ref_loc = ref_pose[:3, 3]
     r = np.linalg.norm(ref_loc)  # radial distance
     ref_theta = np.arccos(ref_loc[2] / r)
@@ -160,28 +157,20 @@ def gen_pose_circle(ref_pose, n_poses, centre=[0., 0., 0.]):
     else:
         ref_phi = np.arctan(ref_loc[1] / ref_loc[0]) + np.pi
 
-    print(ref_loc, r)
-    print('ref phi', ref_phi )
+    # print(ref_loc, r)
+    # print('ref phi', ref_phi )
     # print(ref_phi * 180 / np.pi % (360))
-    print('ref theta', ref_theta)
+    # print('ref theta', ref_theta)
 
     poses = []
     # Don't sample right up to 2*pi
     sampled_phis = (np.linspace(0, 2 * np.pi - 0.01, n_poses) + ref_phi)
     # print(sampled_phis)
     for phi in sampled_phis:
-        print('\n\nphi and theta', phi, ref_theta)
         loc = np.array([r * np.sin(ref_theta) * np.cos(phi),
                         r * np.sin(ref_theta) * np.sin(phi),
                         r * np.cos(ref_theta)])
-        print(loc)
         poses.append(look_at(loc,
                              centre,
                              np.array([0., 0., 1.])).astype(float))
-        print('comparing look at funcs')
-        print(look_at(loc,
-                     centre,
-                     np.array([0., 0., 1.])).astype(float))
-        print(cswm_look_at(loc, centre))
-
     return poses

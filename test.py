@@ -59,10 +59,11 @@ def test():
                                   shuffle=True,
                                   num_workers=4)
 
-    # obs = test_loader.__iter__().next()
-    # data_util.show_batch_pairs(obs)
-    # input_shape = obs['image1'].size()[1:]
-    input_shape = torch.Size([3, 128, 128])
+    print(f'Size of test dataset {len(test_dataset)}')
+
+    obs = test_loader.__iter__().next()
+    data_util.show_batch_pairs(obs)
+    input_shape = obs['image1'].size()[1:]
 
     # Load training params
     with open(args.train_log_dir + '/params.txt', 'r') as f:
@@ -103,6 +104,7 @@ def test():
         total_losses = []
         for batch_idx, data_batch in enumerate(test_loader):
             img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
+            batch_size = img1.shape[0]
             imgs = torch.cat((img1, img2), dim=0)
             w, h = imgs.size(-2), imgs.size(-1)
             images_gt = imgs.reshape(-1, 2, 3, w, h)
@@ -113,8 +115,8 @@ def test():
             out = model(imgs, actions)
             masks, masked_comps, recs = model.compose_image(out)
 
-            rec_views = recs[:args.batch_size * 2]
-            novel_views = recs[args.batch_size * 2:]
+            rec_views = recs[:batch_size * 2]
+            novel_views = recs[batch_size * 2:]
 
             same_view_loss = l2_loss(rec_views, imgs)
             novel_view_loss = l2_loss(novel_views, imgs)
@@ -183,9 +185,6 @@ def test():
                     plt.imsave(os.path.join(dv_comps_dir, f'{i + batch_idx * args.batch_size:04d}.png'),
                                np.transpose(comps_diff_view_images, (1, 2, 0)))
 
-            # if batch_idx == 3:
-            break
-
         save_circles(model, args.results_dir, args.circle_source_img_path.split())
 
     with open(os.path.join(args.results_dir, "results.txt"), "w") as out_file:
@@ -197,7 +196,7 @@ def test():
     print("\nFinal score: ")
 
 
-def save_circles(model, results_dir, img_paths, num_renders=50):
+def save_circles(model, results_dir, img_paths, num_renders=5):
     circles_dir = os.path.join(results_dir, 'circles')
     util.cond_mkdir(circles_dir)
 

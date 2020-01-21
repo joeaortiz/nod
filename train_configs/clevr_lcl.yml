@@ -7,7 +7,7 @@ num_train_scenes: 1
 val_pairs_per_scene: 90
 num_val_scenes: 1
 
-batch_size: 2
+batch_size: 10
 epochs: 100
 
 name: test
