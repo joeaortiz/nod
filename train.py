@@ -233,8 +233,8 @@ for epoch in range(1, args.epochs + 1):
                     diff_view_losses.append(novel_view_loss.item())
                     total_losses.append(total_loss.item())
 
-                model.write_updates(writer, recs, imgs, comps,
-                                    scaled_masks, masked_comps, step, prefix='val_')
+                model.write_updates(writer, recs, imgs,
+                                    masks, masked_comps, step, prefix='val_')
 
                 writer.add_scalar("val_same_view_loss", np.mean(same_view_losses), step)
                 writer.add_scalar("val_diff_view_loss", np.mean(diff_view_losses), step)
