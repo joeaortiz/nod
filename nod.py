@@ -183,7 +183,7 @@ class NodModel(nn.Module):
         identity_action[:, 5] = 1.
         identity_action[:, 10] = 1.
 
-        actions = torch.cat((torch.zeros_like(actions), actions), dim=0)
+        actions = torch.cat((identity_action, actions), dim=0)
         transformed_state = self.transition_model(duplicated_state, actions)
         # duplicated_state: [B*4, num_slots, embedding_dim]
 
