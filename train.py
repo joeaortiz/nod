@@ -243,8 +243,6 @@ for epoch in range(1, args.epochs + 1):
 
         step += 1
 
-        break
-    break
 
     avg_loss = train_loss / len(train_loader.dataset)
     print('====> Epoch: {} Average loss: {:.6f}'.format(
