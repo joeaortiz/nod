@@ -7,7 +7,7 @@ num_train_scenes: 1
 val_pairs_per_scene: 90
 num_val_scenes: 1
 
-batch_size: 10
+batch_size: 12
 epochs: 2000
 
 name: one_scene_nv
