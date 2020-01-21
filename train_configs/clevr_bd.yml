@@ -8,6 +8,6 @@ val_pairs_per_scene: 90
 num_val_scenes: 1
 
 batch_size: 10
-epochs: 100
+epochs: 2000
 
-name: one_scene
+name: one_scene_nv
