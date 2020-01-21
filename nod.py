@@ -77,7 +77,7 @@ class NodModel(nn.Module):
 
         return masks, masked_comps, recs
 
-    def write_updates(self, writer, reconstructions, images_gt, comps, masks, masked_comps,
+    def write_updates(self, writer, reconstructions, images_gt, masks, masked_comps,
                       iter, prefix="", num_img_pairs=3, num_input_pairs=10):
         """ Writes tensorboard summaries using tensorboardx api.
             num_img_pairs: Number of input image pairs to display.

@@ -202,7 +202,7 @@ for epoch in range(1, args.epochs + 1):
         writer.add_scalar("total_loss", total_loss, step)
 
         if not step % 100:
-            model.write_updates(writer, recs, imgs, comps,
+            model.write_updates(writer, recs, imgs,
                                 scaled_masks, masked_comps, step)
 
         if step % args.steps_til_val == 0 and not args.no_validation:
