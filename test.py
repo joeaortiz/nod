@@ -196,7 +196,7 @@ def test():
     print("\nFinal score: ")
 
 
-def save_circles(model, results_dir, img_paths, num_renders=5):
+def save_circles(model, results_dir, img_paths, num_renders=50):
     circles_dir = os.path.join(results_dir, 'circles')
     util.cond_mkdir(circles_dir)
 

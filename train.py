@@ -42,6 +42,8 @@ parser.add_argument('--action-dim', type=int, default=12,
                     help='Dimensionality of action space.')
 parser.add_argument('--num-slots', type=int, default=3,
                     help='Number of object slots in model.')
+parser.add_argument('--identity_action', action='store_false', default=True,
+                    help='Number of object slots in model.')
 
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
@@ -111,7 +113,8 @@ model = nod.NodModel(
     hidden_dim=args.hidden_dim,
     num_slots=args.num_slots,
     encoder=args.encoder,
-    decoder=args.decoder)
+    decoder=args.decoder,
+    identity_action=args.identity_action)
 model.to(device)
 
 model.apply(util.weights_init)

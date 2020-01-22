@@ -20,13 +20,15 @@ class NodModel(nn.Module):
     """
 
     def __init__(self, embedding_dim, input_dims, hidden_dim,
-                 num_slots, encoder='cswm', decoder='broadcast'):
+                 num_slots, encoder='cswm', decoder='broadcast',
+                 identity_action=True):
         super(NodModel, self).__init__()
         self.embedding_dim = embedding_dim
         self.input_dims = input_dims
         self.hidden_dims = hidden_dim
 
         self.num_slots = num_slots
+        self.identity_action_flag = identity_action
 
         if encoder == 'cswm':
             self.encoder = modules.EncoderCSWM(input_dims=self.input_dims,
@@ -37,7 +39,7 @@ class NodModel(nn.Module):
                                                       hidden_dim=512,
                                                       action_dim=12,
                                                       num_objects=self.num_slots,
-                                                      residual=True)
+                                                      residual=False)
 
         if decoder == 'broadcast':
             self.decoder = modules.BroadcastDecoder(latent_dim=self.embedding_dim,
@@ -176,22 +178,29 @@ class NodModel(nn.Module):
         batch_size = imgs.size(0) // 2
         # state, transf_state: [B*2, num_slots, embedding_dim]
         state = self.encoder(imgs)
-        duplicated_state = state.repeat(2, 1, 1)
 
-        identity_action = torch.zeros_like(actions)
-        identity_action[:, 0] = 1.
-        identity_action[:, 5] = 1.
-        identity_action[:, 10] = 1.
+        if self.identity_action_flag:
+            duplicated_state = state.repeat(2, 1, 1)
 
-        actions = torch.cat((identity_action, actions), dim=0)
-        transformed_state = self.transition_model(duplicated_state, actions)
-        # duplicated_state: [B*4, num_slots, embedding_dim]
+            identity_action = torch.zeros_like(actions)
+            identity_action[:, 0] = 1.
+            identity_action[:, 5] = 1.
+            identity_action[:, 10] = 1.
 
-        # Swap order of transformed states so transformed images are reconstructed
-        # in same order as input images.
-        transformed_state = torch.cat((transformed_state[:batch_size*2],
-                                       transformed_state[batch_size*3:],
-                                       transformed_state[batch_size*2:batch_size*3]), dim=0)
+            actions = torch.cat((identity_action, actions), dim=0)
+            transformed_state = self.transition_model(duplicated_state, actions)
+            # duplicated_state: [B*4, num_slots, embedding_dim]
+
+            # Swap order of transformed states so transformed images are reconstructed
+            # in same order as input images.
+            transformed_state = torch.cat((transformed_state[:batch_size*2],
+                                           transformed_state[batch_size*3:],
+                                           transformed_state[batch_size*2:batch_size*3]), dim=0)
+        else:
+            transformed_state = self.transition_model(state, actions)
+            transformed_state = torch.cat((state,
+                                           transformed_state[batch_size:],
+                                           transformed_state[:batch_size]), dim=0)
 
         # Decode embedding
         out = self.decoder(transformed_state.reshape(-1, self.embedding_dim))
