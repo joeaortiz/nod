@@ -79,6 +79,7 @@ def test():
 
     print("Loading model from %s" % args.checkpoint_path)
     util.custom_load(model, path=args.checkpoint_path)
+    print("Evaluation to be saved to %s" % args.results_dir)
 
     model.to(device)
     model.eval()

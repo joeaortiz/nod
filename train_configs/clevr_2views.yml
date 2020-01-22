@@ -1,0 +1,15 @@
+# Configuration file
+
+train_dir: /mnt/sda/clevr-dataset-gen-1/datasets/2views/train
+val_dir: /mnt/sda/clevr-dataset-gen-1/datasets/2views/val
+train_pairs_per_scene: 1
+num_train_scenes: -1
+val_pairs_per_scene: 1
+num_val_scenes: -1
+
+batch_size: 12
+epochs: 1000
+
+identity_action: False
+
+name: 2views

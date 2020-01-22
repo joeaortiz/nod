@@ -21,7 +21,7 @@ class NodModel(nn.Module):
 
     def __init__(self, embedding_dim, input_dims, hidden_dim,
                  num_slots, encoder='cswm', decoder='broadcast',
-                 identity_action=True):
+                 identity_action=False, residual=False):
         super(NodModel, self).__init__()
         self.embedding_dim = embedding_dim
         self.input_dims = input_dims
@@ -39,7 +39,7 @@ class NodModel(nn.Module):
                                                       hidden_dim=512,
                                                       action_dim=12,
                                                       num_objects=self.num_slots,
-                                                      residual=False)
+                                                      residual=residual)
 
         if decoder == 'broadcast':
             self.decoder = modules.BroadcastDecoder(latent_dim=self.embedding_dim,

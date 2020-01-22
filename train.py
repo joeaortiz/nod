@@ -42,8 +42,12 @@ parser.add_argument('--action-dim', type=int, default=12,
                     help='Dimensionality of action space.')
 parser.add_argument('--num-slots', type=int, default=3,
                     help='Number of object slots in model.')
-parser.add_argument('--identity_action', action='store_false', default=True,
-                    help='Number of object slots in model.')
+
+parser.add_argument('--identity_action', action='store_true', default=False,
+                    help='Should we use the transition model conditioned on identity relative '
+                         'pose to condition same view rendering?')
+parser.add_argument('--residual', action='store_true', default=False,
+                    help='Should we use residual connections in the transition model?')
 
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA training.')
@@ -92,7 +96,7 @@ train_dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
 train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                shuffle=True, num_workers=4)
 if not args.no_validation:
-    val_batch_size = 2
+    val_batch_size = 10
     val_dataset = dataio.TwoViewsDataset(data_dir=args.val_dir,
                                          num_pairs_per_scene=args.val_pairs_per_scene,
                                          num_scenes=args.num_val_scenes)
@@ -114,7 +118,8 @@ model = nod.NodModel(
     num_slots=args.num_slots,
     encoder=args.encoder,
     decoder=args.decoder,
-    identity_action=args.identity_action)
+    identity_action=args.identity_action,
+    residual=args.residual)
 model.to(device)
 
 model.apply(util.weights_init)
