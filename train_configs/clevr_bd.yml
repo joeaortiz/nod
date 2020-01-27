@@ -12,6 +12,6 @@ epochs: 1000
 
 identity_action: False
 residual: True
-canonical_rep: True
+canonical-rep: True
 
 name: 2views_canonical
