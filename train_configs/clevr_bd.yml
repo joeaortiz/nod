@@ -3,11 +3,15 @@
 train_dir: /mnt/datasets/joe/clevr/2views/train
 val_dir: /mnt/datasets/joe/clevr/2views/val
 train_pairs_per_scene: 1
-num_train_scenes: -1
+num_train_scenes: -1  # Use all scenes in directory
 val_pairs_per_scene: 1
 num_val_scenes: -1
 
 batch_size: 12
-epochs: 2000
+epochs: 1000
 
-name: 2views
+identity_action: False
+residual: True
+canonical_rep: True
+
+name: 2views_canonical

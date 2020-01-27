@@ -6,6 +6,7 @@ import os
 import pickle
 
 import numpy as np
+import matplotlib.pyplot as plt
 import logging
 
 from torch.utils import data
@@ -29,6 +30,11 @@ parser.add_argument('--epochs', type=int, default=50,
 parser.add_argument('--learning-rate', type=float, default=5e-4,
                     help='Learning rate.')
 
+parser.add_argument('--load_from_checkpoint', action='store_true', default=False,
+                    help='Start training from checkpoint.')
+parser.add_argument('--checkpoint_path', type=str, default='checkpoint',
+                    help='Path to checkpoint. Only use this path is load_from_checkpoint is True.')
+
 parser.add_argument('--encoder', type=str, default='cswm',
                     help='Object inference model / encoder.')
 parser.add_argument('--decoder', type=str, default='broadcast',
@@ -42,6 +48,8 @@ parser.add_argument('--action-dim', type=int, default=12,
                     help='Dimensionality of action space.')
 parser.add_argument('--num-slots', type=int, default=3,
                     help='Number of object slots in model.')
+parser.add_argument('--canonical-rep', action='store_true', default=False,
+                    help='Have a canonical scene representation?')
 
 parser.add_argument('--identity_action', action='store_true', default=False,
                     help='Should we use the transition model conditioned on identity relative '
@@ -79,6 +87,9 @@ parser.add_argument('--steps_til_val', type=int, default=200,
 parser.add_argument('--no_validation', action='store_true', default=False,
                help='If no validation set should be used.')
 
+parser.add_argument('--sidelength', type=int, default=None,
+               help='Sidelength of images.')
+
 parser.add_argument('--name', type=str, default='test',
                     help='Experiment name.')
 parser.add_argument('--save-folder', type=str,
@@ -92,24 +103,25 @@ device = torch.device('cuda' if args.cuda else 'cpu')
 
 train_dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
                                        num_pairs_per_scene=args.train_pairs_per_scene,
-                                       num_scenes=args.num_train_scenes)
+                                       num_scenes=args.num_train_scenes,
+                                       sidelength=args.sidelength)
+print(f'Size of train dataset {len(train_dataset)}')
 train_loader = data.DataLoader(train_dataset, batch_size=args.batch_size,
                                shuffle=True, num_workers=4)
 if not args.no_validation:
     val_batch_size = 10
     val_dataset = dataio.TwoViewsDataset(data_dir=args.val_dir,
                                          num_pairs_per_scene=args.val_pairs_per_scene,
-                                         num_scenes=args.num_val_scenes)
+                                         num_scenes=args.num_val_scenes,
+                                         sidelength=args.sidelength)
     val_loader = data.DataLoader(val_dataset, batch_size=val_batch_size,
                                  shuffle=True, num_workers=4)
 
 
-print(f'Size of dataset {len(train_dataset)}')
 
-# obs = train_loader.__iter__().next()
-# data_util.show_batch_pairs(obs)
-# input_shape = obs['image1'].size()[1:]
-input_shape = torch.Size([3, 128, 128])
+obs = train_loader.__iter__().next()
+data_util.show_batch_pairs(obs)
+input_shape = obs['image1'].size()[1:]
 
 model = nod.NodModel(
     embedding_dim=args.embedding_dim,
@@ -119,10 +131,16 @@ model = nod.NodModel(
     encoder=args.encoder,
     decoder=args.decoder,
     identity_action=args.identity_action,
-    residual=args.residual)
+    residual=args.residual,
+    canonical=args.canonical_rep)
 model.to(device)
 
-model.apply(util.weights_init)
+if args.load_from_checkpoint:
+    print("Loading model from %s" % args.checkpoint_path)
+    util.custom_load(model, path=args.checkpoint_path)
+else:
+    print("Initialising random weights")
+    model.apply(util.weights_init)
 
 optimizer = torch.optim.Adam(
     model.parameters(),
@@ -176,10 +194,15 @@ for epoch in range(1, args.epochs + 1):
 
     for batch_idx, data_batch in enumerate(train_loader):
         img1, img2 = data_batch['image1'].to(device), data_batch['image2'].to(device)
+
         batch_size = img1.shape[0]
         imgs = torch.cat((img1, img2), dim=0)
-        action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
-        actions = torch.cat((action1, action2), dim=0)
+        if args.canonical_rep:
+            pose1, pose2 = data_batch['pose1'].to(device), data_batch['pose2'].to(device)
+            actions = torch.cat((pose1, pose2), dim=0)
+        else:
+            action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
+            actions = torch.cat((action1, action2), dim=0)
 
         optimizer.zero_grad()
 
@@ -226,8 +249,12 @@ for epoch in range(1, args.epochs + 1):
                     img1, img2 = val_batch['image1'].to(device), val_batch['image2'].to(device)
                     val_batch_size = img1.shape[0]
                     imgs = torch.cat((img1, img2), dim=0)
-                    action1, action2 = val_batch['transf21'].to(device), val_batch['transf12'].to(device)
-                    actions = torch.cat((action1, action2), dim=0)
+                    if args.canonical_rep:
+                        pose1, pose2 = val_batch['pose1'].to(device), val_batch['pose2'].to(device)
+                        actions = torch.cat((pose1, pose2), dim=0)
+                    else:
+                        action1, action2 = val_batch['transf21'].to(device), val_batch['transf12'].to(device)
+                        actions = torch.cat((action1, action2), dim=0)
 
                     out = model(imgs, actions)
                     masks, masked_comps, recs = model.compose_image(out)

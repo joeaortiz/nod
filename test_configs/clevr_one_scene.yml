@@ -4,9 +4,9 @@ test_dir: /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/test
 test_pairs_per_scene: 300
 num_test_scenes: 1
 
-train_log_dir: ./logs/one_scene_res/
-checkpoint_path: ./logs/one_scene_res/checkpoints
-results_dir: ./logs/one_scene_res/eval/
+train_log_dir: ./logs/one_scene_50imgs/
+checkpoint_path: ./logs/one_scene_50imgs/checkpoints
+results_dir: ./logs/one_scene_50imgs/eval/
 
 batch_size: 2
 save_out_first_n: 50

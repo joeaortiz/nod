@@ -1,0 +1,12 @@
+# Configuration file
+
+train_dir: /mnt/sda/shapenet/one_car/train
+train_pairs_per_scene: 125
+num_train_scenes: 1
+sidelength: 128
+no_validation: True
+
+batch_size: 10
+epochs: 2000
+
+name: truck

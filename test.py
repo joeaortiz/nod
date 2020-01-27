@@ -35,6 +35,9 @@ parser.add_argument('--checkpoint_path', default=None,
 parser.add_argument('--results_dir', default=None,
                     help='Path to save evaluation results too.')
 
+parser.add_argument('--sidelength', type=int, default=None,
+               help='Sidelength of images.')
+
 parser.add_argument('--batch_size', type=int, default=10, help='Batch size.')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='Disable CUDA.')
@@ -49,11 +52,13 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 device = torch.device('cuda' if args.cuda else 'cpu')
 
+
 def test():
 
     test_dataset = dataio.TwoViewsDataset(data_dir=args.test_dir,
                                           num_pairs_per_scene=args.test_pairs_per_scene,
-                                          num_scenes=args.num_test_scenes)
+                                          num_scenes=args.num_test_scenes,
+                                          sidelength=args.sidelength)
     test_loader = data.DataLoader(test_dataset,
                                   batch_size=args.batch_size,
                                   shuffle=True,
@@ -108,7 +113,7 @@ def test():
             batch_size = img1.shape[0]
             imgs = torch.cat((img1, img2), dim=0)
             w, h = imgs.size(-2), imgs.size(-1)
-            images_gt = imgs.reshape(-1, 2, 3, w, h)
+            images_gt = torch.cat((img1.unsqueeze(1), img2.unsqueeze(1)), dim=1)
 
             action1, action2 = data_batch['transf21'].to(device), data_batch['transf12'].to(device)
             actions = torch.cat((action1, action2), dim=0)
@@ -127,16 +132,20 @@ def test():
             total_losses.append(total_loss.item())
             print(f"Number input images {batch_idx * args.batch_size}  |  Running l2 loss: {np.mean(total_losses)}")
 
+            break
+
             if batch_idx * args.batch_size < args.save_out_first_n:
 
-                rec_views = rec_views.reshape(args.batch_size, 2, 3, w, h)
-                novel_views = novel_views.reshape(args.batch_size, 2, 3, w, h)
+                rec_views = rec_views.reshape(2, args.batch_size, 3, w, h).transpose(0, 1)
+                novel_views = novel_views.reshape(2, args.batch_size, 3, w, h).transpose(0, 1)
                 same_view_masked_comps = masked_comps[:args.batch_size * 2].reshape(
-                    args.batch_size, 2, model.num_slots, 3, w, h)
+                    2, args.batch_size, model.num_slots, 3, w, h).transpose(0, 1)
                 diff_view_masked_comps = masked_comps[args.batch_size * 2:].reshape(
-                    args.batch_size, 2, model.num_slots, 3, w, h)
-                same_view_masks = masks[args.batch_size * 2:].reshape(args.batch_size, 2, model.num_slots, w, h)
-                diff_view_masks = masks[args.batch_size * 2:].reshape(args.batch_size, 2, model.num_slots, w, h)
+                    2, args.batch_size, model.num_slots, 3, w, h).transpose(0, 1)
+                same_view_masks = masks[args.batch_size * 2:].reshape(2, args.batch_size,
+                                                                      model.num_slots, w, h).transpose(0, 1)
+                diff_view_masks = masks[args.batch_size * 2:].reshape(2, args.batch_size,
+                                                                      model.num_slots, w, h).transpose(0, 1)
                 # Expand to have 3 channels so can concat with rgb images
                 same_view_masks = same_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
                 diff_view_masks = diff_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
@@ -236,6 +245,15 @@ def save_circles(model, results_dir, img_paths, num_renders=50):
                                              normalize=True,
                                              range=(-1, 1))
         print('Saved one circle view.')
+
+
+def masks_eval(model, results_dir, img_paths, num_renders=50):
+    circles_dir = os.path.join(results_dir, 'circles')
+    util.cond_mkdir(circles_dir)
+
+    print('Evaluating IoU of generated masks')
+
+
 
 
 def main():

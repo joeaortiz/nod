@@ -1,13 +1,13 @@
 # Configuration file
 
 test_dir: /mnt/sda/clevr-dataset-gen-1/datasets/2views/test
-test_pairs_per_scene: 250
-num_test_scenes: 1
+test_pairs_per_scene: 1
+num_test_scenes: 250
 
-train_log_dir: ./logs/one_scene_nv/
-checkpoint_path: ./logs/one_scene_nv/checkpoints
-results_dir: ./logs/one_scene_nv/eval/
+train_log_dir: ./logs/2views/
+checkpoint_path: ./logs/2views/checkpoints
+results_dir: ./logs/2views/eval/
 
-batch_size: 20
+batch_size: 5
 save_out_first_n: 50
-circle_source_img_path: /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/test/000000/rgb/000808.png /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/test/000000/rgb/000803.png /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/test/000000/rgb/000887.png /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/test/000000/rgb/000876.png
+circle_source_img_path: /mnt/sda/clevr-dataset-gen-1/datasets/2views/test/004500/rgb/000000.png /mnt/sda/clevr-dataset-gen-1/datasets/2views/test/004501/rgb/000001.png

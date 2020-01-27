@@ -12,7 +12,7 @@ from glob import glob
 class TwoViewsDataset(data.Dataset):
     """Create dataset of (I_1, I_2, T_{21}) image pairs and relative transform for each scene instance."""
 
-    def __init__(self, data_dir, num_pairs_per_scene=-1, num_scenes=-1):
+    def __init__(self, data_dir, num_pairs_per_scene=-1, num_scenes=-1, sidelength=None):
         """
         Args:
             data_dir (string): Path to directory containing all instances
@@ -20,6 +20,8 @@ class TwoViewsDataset(data.Dataset):
                                 if -1 use all images for scene instance.
             num_scenes: if -1 use all scene in dir
         """
+        self.sidelength = sidelength
+
         self.instance_dirs = sorted(glob(os.path.join(data_dir, "*/")))
         assert (len(self.instance_dirs) != 0), "No scene instances in the data directory"
 
@@ -52,8 +54,8 @@ class TwoViewsDataset(data.Dataset):
 
     def __getitem__(self, idx):
 
-        img1 = data_util.load_rgb(self.rgb_paths[idx*2], sidelength=None)
-        img2 = data_util.load_rgb(self.rgb_paths[idx*2 + 1], sidelength=None)
+        img1 = data_util.load_rgb(self.rgb_paths[idx*2], sidelength=self.sidelength)
+        img2 = data_util.load_rgb(self.rgb_paths[idx*2 + 1], sidelength=self.sidelength)
         img1 = img1.transpose(2, 0, 1)
         img2 = img2.transpose(2, 0, 1)
 
@@ -66,6 +68,8 @@ class TwoViewsDataset(data.Dataset):
             'image1': img1,
             'image2': img2,
             'transf21': transf21.flatten()[:12],
-            'transf12': transf12.flatten()[:12]
+            'transf12': transf12.flatten()[:12],
+            'pose1': pose1.flatten()[:12],
+            'pose2': pose2.flatten()[:12]
         }
         return sample

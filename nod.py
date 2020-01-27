@@ -21,7 +21,8 @@ class NodModel(nn.Module):
 
     def __init__(self, embedding_dim, input_dims, hidden_dim,
                  num_slots, encoder='cswm', decoder='broadcast',
-                 identity_action=False, residual=False):
+                 identity_action=False, residual=False,
+                 canonical=False):
         super(NodModel, self).__init__()
         self.embedding_dim = embedding_dim
         self.input_dims = input_dims
@@ -29,6 +30,7 @@ class NodModel(nn.Module):
 
         self.num_slots = num_slots
         self.identity_action_flag = identity_action
+        self.canonical = canonical
 
         if encoder == 'cswm':
             self.encoder = modules.EncoderCSWM(input_dims=self.input_dims,
@@ -46,13 +48,15 @@ class NodModel(nn.Module):
                                                     output_dim=4,  # 3 rgb channels and one mask
                                                     hidden_channels=32,
                                                     num_layers=4,
-                                                    img_dims=[128, 128],  # width and height of square image
+                                                    img_dims=self.input_dims[1:],  # width and height of square image
                                                     act_fn='elu')
         if decoder == 'cnn':
+            out_shape = self.input_dims
+            out_shape[0] += 1
             self.decoder = modules.DecoderCNNMedium(input_dim=self.embedding_dim,
                                                     hidden_dim=32,
                                                     num_objects=self.num_slots,
-                                                    output_size=[4, 128, 128])
+                                                    output_size=out_shape)
 
         self.l2_loss = nn.MSELoss(reduction="mean")
 
@@ -86,24 +90,25 @@ class NodModel(nn.Module):
             num_img_pairs: Number of input image pairs to display.
         """
         w, h = images_gt.size(2), images_gt.size(3)
-        images_gt = images_gt.reshape(-1, 2, 3, w, h)
-        batch_size = images_gt.size(0)
+        batch_size = images_gt.size(0) // 2
+        images_gt = torch.cat((images_gt[:batch_size].unsqueeze(1),
+                               images_gt[batch_size:].unsqueeze(1)), dim=1)
         if num_img_pairs > batch_size:
             num_img_pairs = batch_size
 
-        same_view_recs = reconstructions[:batch_size*2].reshape(batch_size, 2, 3, w, h)
-        diff_view_recs = reconstructions[batch_size*2:].reshape(batch_size, 2, 3, w, h)
+        same_view_recs = reconstructions[:batch_size*2].reshape(2, batch_size, 3, w, h).transpose(0, 1)
+        diff_view_recs = reconstructions[batch_size*2:].reshape(2, batch_size, 3, w, h).transpose(0, 1)
 
         # same_view_comps = comps[:batch_size*2].reshape(
         #     batch_size, 2, self.num_slots, 3, w, h)
         # diff_view_comps = comps[batch_size*2:].reshape(
         #     batch_size, 2, self.num_slots, 3, w, h)
         same_view_masked_comps = masked_comps[:batch_size*2].reshape(
-            batch_size, 2, self.num_slots, 3, w, h)
+            2, batch_size, self.num_slots, 3, w, h).transpose(0, 1)
         diff_view_masked_comps = masked_comps[batch_size*2:].reshape(
-            batch_size, 2, self.num_slots, 3, w, h)
-        same_view_masks = masks[batch_size*2:].reshape(batch_size, 2, self.num_slots, w, h)
-        diff_view_masks = masks[batch_size*2:].reshape(batch_size, 2, self.num_slots, w, h)
+            2, batch_size, self.num_slots, 3, w, h).transpose(0, 1)
+        same_view_masks = masks[batch_size*2:].reshape(2, batch_size, self.num_slots, w, h).transpose(0, 1)
+        diff_view_masks = masks[batch_size*2:].reshape(2, batch_size, self.num_slots, w, h).transpose(0, 1)
         # Expand to have 3 channels so can concat with rgb images
         same_view_masks = same_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
         diff_view_masks = diff_view_masks.unsqueeze(3).repeat(1, 1, 1, 3, 1, 1)
@@ -171,7 +176,7 @@ class NodModel(nn.Module):
     def forward(self, imgs, actions):
         """
         Foward pass of model.
-        :param imgs: two sets of views concatenated [2*B, 3, 128, 128].
+        :param imgs: two sets of views concatenated [2*B, 3, h, w].
         :param actions: relative transformations to condition transition model.
         :return: Reconstructed images of samples.
         """
@@ -197,7 +202,15 @@ class NodModel(nn.Module):
                                            transformed_state[batch_size*3:],
                                            transformed_state[batch_size*2:batch_size*3]), dim=0)
         else:
-            transformed_state = self.transition_model(state, actions)
+            if self.canonical:
+                # Actions are poses. First transition to canonical state with pose of image
+                # Then transition to novel view state
+                poses = actions
+                novel_poses = torch.cat((actions[:batch_size], actions[batch_size:]), dim=0)
+                transformed_state = self.transition_model(self.transition_model(state, novel_poses), poses)
+            else:
+                # Actions are relative poses
+                transformed_state = self.transition_model(state, actions)
             transformed_state = torch.cat((state,
                                            transformed_state[batch_size:],
                                            transformed_state[:batch_size]), dim=0)

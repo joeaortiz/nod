@@ -6,6 +6,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+import matplotlib.pyplot as plt
+
 
 class EncoderCSWM(nn.Module):
     """Encoder for C-SWM.
@@ -42,6 +44,10 @@ class EncoderCSWM(nn.Module):
         self.height = width_height[1]
 
     def forward(self, obs):
+        # object_maps = self.obj_extractor(obs)
+        # for map in object_maps[0]:
+        #     plt.imshow(map.cpu().detach().numpy() / 2 + 0.5, cmap='plasma')
+        #     plt.show()
         return self.obj_encoder(self.obj_extractor(obs))
 
 

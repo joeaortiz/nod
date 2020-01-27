@@ -1,0 +1,15 @@
+# Configuration file
+
+test_dir: /mnt/sda/shapenet/one_car/test
+test_pairs_per_scene: 125
+num_test_scenes: 1
+
+sidelength: 128
+
+train_log_dir: ./logs/truck/
+checkpoint_path: ./logs/truck/checkpoints
+results_dir: ./logs/truck/eval/
+
+batch_size: 5
+save_out_first_n: 50
+circle_source_img_path: /mnt/sda/shapenet/one_car/test/000000/rgb/000000.png
