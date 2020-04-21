@@ -1,4 +1,4 @@
-name: srns
+name: nod
 channels:
   - pytorch
   - defaults
