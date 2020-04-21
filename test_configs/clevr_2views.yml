@@ -10,4 +10,4 @@ results_dir: ./logs/2views/eval/
 
 batch_size: 5
 save_out_first_n: 50
-circle_source_img_path: /mnt/sda/clevr-dataset-gen-1/datasets/2views/test/004500/rgb/000000.png /mnt/sda/clevr-dataset-gen-1/datasets/2views/test/004501/rgb/000001.png
+circle_source_img_path: /mnt/sda/real/rgb/ball.png # /mnt/sda/clevr-dataset-gen-1/datasets/2views/test/004500/rgb/000000.png /mnt/sda/clevr-dataset-gen-1/datasets/2views/test/004501/rgb/000001.png

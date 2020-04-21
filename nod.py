@@ -4,9 +4,10 @@ import torchvision
 import torch.nn.functional as F
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 import modules
+from custom_modules import attention, spd
+import util
 
 class NodModel(nn.Module):
     """Main module.
@@ -20,7 +21,10 @@ class NodModel(nn.Module):
     """
 
     def __init__(self, embedding_dim, input_dims, hidden_dim,
-                 num_slots, encoder='cswm', decoder='broadcast',
+                 num_slots,
+                 encoder='cswm', cnn_size='small',
+                 decoder='broadcast',
+                 trans_model='gnn',
                  identity_action=False, residual=False,
                  canonical=False):
         super(NodModel, self).__init__()
@@ -35,28 +39,40 @@ class NodModel(nn.Module):
         if encoder == 'cswm':
             self.encoder = modules.EncoderCSWM(input_dims=self.input_dims,
                                                embedding_dim=self.embedding_dim,
-                                               num_objects=self.num_slots)
+                                               num_objects=self.num_slots,
+                                               cnn_size=cnn_size)
 
-        self.transition_model = modules.TransitionGNN(input_dim=self.embedding_dim,
-                                                      hidden_dim=512,
-                                                      action_dim=12,
-                                                      num_objects=self.num_slots,
-                                                      residual=residual)
+        if trans_model == 'gnn':
+            self.transition_model = modules.TransitionGNN(input_dim=self.embedding_dim,
+                                                          hidden_dim=512,
+                                                          action_dim=12,
+                                                          num_objects=self.num_slots,
+                                                          residual=residual)
+        elif trans_model == 'attention':
+            self.transition_model = attention.MultiHeadCondAttention(n_head=5,
+                                                                     input_feature_dim=self.embedding_dim + 12,
+                                                                     out_dim=self.embedding_dim,
+                                                                     dim_k=128,
+                                                                     dim_v=128)
 
         if decoder == 'broadcast':
-            self.decoder = modules.BroadcastDecoder(latent_dim=self.embedding_dim,
-                                                    output_dim=4,  # 3 rgb channels and one mask
-                                                    hidden_channels=32,
-                                                    num_layers=4,
-                                                    img_dims=self.input_dims[1:],  # width and height of square image
-                                                    act_fn='elu')
-        if decoder == 'cnn':
+            self.decoder = spd.BroadcastDecoder(latent_dim=self.embedding_dim,
+                                                output_dim=4,  # 3 rgb channels and one mask
+                                                hidden_channels=32,
+                                                num_layers=4,
+                                                img_dims=self.input_dims[1:],  # width and height of square image
+                                                act_fn='elu')
+        elif decoder == 'cnn':
             out_shape = self.input_dims
             out_shape[0] += 1
             self.decoder = modules.DecoderCNNMedium(input_dim=self.embedding_dim,
                                                     hidden_dim=32,
                                                     num_objects=self.num_slots,
                                                     output_size=out_shape)
+
+        print('Number of params in encoder ', util.count_params(self.encoder))
+        print(f'Number of params in transition model ', util.count_params(self.transition_model))
+        print('Number of params in decoder ', util.count_params(self.decoder))
 
         self.l2_loss = nn.MSELoss(reduction="mean")
 

@@ -14,7 +14,6 @@ identity_action: False
 residual: True
 canonical-rep: True
 
-load_from_checkpoint: False
-checkpoint_path: ./logs/2views/checkpoints/epoch_0418_iter_119548.pth
+#checkpoint_path: ./logs/2views/checkpoints/epoch_0418_iter_119548.pth
 
 name: test

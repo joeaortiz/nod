@@ -237,7 +237,14 @@ def save_circles(model, results_dir, img_paths, num_renders=50):
             state = model.transition_model(state, actions)
 
             out = model.decoder(state.reshape(-1, model.embedding_dim))
-            _, _, recs = model.compose_image(out)
+            masks, _, recs = model.compose_image(out)
+            print(masks.shape)
+            plt.imshow(masks[0, 0].cpu().detach().numpy())
+            plt.show()
+            plt.imshow(masks[0, 1].cpu().detach().numpy())
+            plt.show()
+            plt.imshow(masks[0, 2].cpu().detach().numpy())
+            plt.show()
 
             for i, rec in enumerate(recs):
                 torchvision.utils.save_image(rec,

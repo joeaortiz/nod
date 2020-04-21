@@ -30,15 +30,17 @@ parser.add_argument('--epochs', type=int, default=50,
 parser.add_argument('--learning-rate', type=float, default=5e-4,
                     help='Learning rate.')
 
-parser.add_argument('--load_from_checkpoint', action='store_true', default=False,
-                    help='Start training from checkpoint.')
-parser.add_argument('--checkpoint_path', type=str, default='checkpoint',
+parser.add_argument('--checkpoint_path', default=None,
                     help='Path to checkpoint. Only use this path is load_from_checkpoint is True.')
 
 parser.add_argument('--encoder', type=str, default='cswm',
                     help='Object inference model / encoder.')
+parser.add_argument('--cnn_size', type=str, default='large',
+                    help='CNN size for encoder.')
 parser.add_argument('--decoder', type=str, default='broadcast',
                     help='Decoder of latent to image space.')
+parser.add_argument('--trans_model', type=str, default='gnn',
+                    help='Transition model to new view representation.')
 
 parser.add_argument('--hidden-dim', type=int, default=512,
                     help='Number of hidden units in object extractor and object encoder.')
@@ -99,6 +101,8 @@ parser.add_argument('--save-folder', type=str,
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
+print('Configs: \n', args)
+
 device = torch.device('cuda' if args.cuda else 'cpu')
 
 train_dataset = dataio.TwoViewsDataset(data_dir=args.train_dir,
@@ -118,7 +122,6 @@ if not args.no_validation:
                                  shuffle=True, num_workers=4)
 
 
-
 obs = train_loader.__iter__().next()
 data_util.show_batch_pairs(obs)
 input_shape = obs['image1'].size()[1:]
@@ -129,13 +132,16 @@ model = nod.NodModel(
     hidden_dim=args.hidden_dim,
     num_slots=args.num_slots,
     encoder=args.encoder,
+    cnn_size=args.cnn_size,
+    trans_model=args.trans_model,
     decoder=args.decoder,
     identity_action=args.identity_action,
     residual=args.residual,
     canonical=args.canonical_rep)
 model.to(device)
+print('Number of parameters in model', util.count_params(model))
 
-if args.load_from_checkpoint:
+if args.checkpoint_path is not None:
     print("Loading model from %s" % args.checkpoint_path)
     util.custom_load(model, path=args.checkpoint_path)
 else:
@@ -145,6 +151,8 @@ else:
 optimizer = torch.optim.Adam(
     model.parameters(),
     lr=args.learning_rate)
+
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=200, gamma=0.4)
 
 now = datetime.datetime.now()
 timestamp = now.isoformat()
@@ -279,6 +287,9 @@ for epoch in range(1, args.epochs + 1):
             model.train()
 
         step += 1
+
+
+    # scheduler.step()
 
     avg_loss = train_loss / len(train_loader.dataset)
     print('====> Epoch: {} Average loss: {:.6f}'.format(

@@ -45,7 +45,8 @@ def weights_init(m):
 
     if isinstance(m, nn.Linear):
         nn.init.xavier_uniform_(m.weight)
-        nn.init.zeros_(m.bias)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
 
 
 def custom_load(model, path):
@@ -59,3 +60,8 @@ def custom_load(model, path):
 
     # for param_tensor in torch.load(checkpoint_path):
     #     print(param_tensor, "\t", torch.load(checkpoint_path)[param_tensor].size())
+
+
+def count_params(model):
+    total_params = sum([np.product(x.shape) for x in model.parameters()])
+    return total_params

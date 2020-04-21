@@ -2,12 +2,14 @@
 
 train_dir: /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/train
 val_dir: /mnt/sda/clevr-dataset-gen-1/datasets/manyviews/val
-train_pairs_per_scene: 25
+train_pairs_per_scene: 50
 num_train_scenes: 1
 val_pairs_per_scene: 10
 num_val_scenes: 1
 
-batch_size: 4
+batch_size: 10
 epochs: 5000
 
-name: one_scene_50imgs
+trans_model: gnn
+
+name: one_scene_100imgs_gnn

@@ -20,7 +20,8 @@ class EncoderCSWM(nn.Module):
     """
 
     def __init__(self, input_dims, embedding_dim, num_objects,
-                 obj_extractor_hidden_dim=32, obj_encoder_hidden_dim=512):
+                 obj_extractor_hidden_dim=32, obj_encoder_hidden_dim=512,
+                 cnn_size='small'):
         super(EncoderCSWM, self).__init__()
 
         self.embedding_dim = embedding_dim
@@ -29,22 +30,26 @@ class EncoderCSWM(nn.Module):
         num_channels = input_dims[0]
         width_height = input_dims[1:]
 
-        self.obj_extractor = EncoderCNNLarge(
-            input_dim=num_channels,
-            hidden_dim=obj_extractor_hidden_dim,
-            num_objects=num_objects)
+        if cnn_size == 'small':
+            self.obj_extractor = EncoderCNNSmall(input_dim=num_channels,
+                                                 hidden_dim=obj_extractor_hidden_dim,
+                                                 num_objects=num_objects)
+        elif cnn_size == 'large':
+            self.obj_extractor = EncoderCNNLarge(input_dim=num_channels,
+                                                 hidden_dim=obj_extractor_hidden_dim,
+                                                 num_objects=num_objects)
 
-        self.obj_encoder = EncoderMLP(
-            input_dim=np.prod(width_height),
-            hidden_dim=obj_encoder_hidden_dim,
-            output_dim=embedding_dim,
-            num_objects=num_objects)
+        self.obj_encoder = EncoderMLP(input_dim=np.prod(width_height),
+                                      hidden_dim=obj_encoder_hidden_dim,
+                                      output_dim=embedding_dim,
+                                      num_objects=num_objects)
 
         self.width = width_height[0]
         self.height = width_height[1]
 
     def forward(self, obs):
         # object_maps = self.obj_extractor(obs)
+        # print('shape of obj maps', object_maps.shape)
         # for map in object_maps[0]:
         #     plt.imshow(map.cpu().detach().numpy() / 2 + 0.5, cmap='plasma')
         #     plt.show()
@@ -146,7 +151,7 @@ class TransitionGNN(torch.nn.Module):
 
         # states: [batch_size (B), num_objects, embedding_dim]
         # node_attr: Flatten states tensor to [B * num_objects, embedding_dim]
-        node_attr = states.view(-1, self.input_dim)
+        node_attr = states.reshape(-1, self.input_dim)
 
         edge_attr = None
         edge_index = None
@@ -319,109 +324,3 @@ class DecoderCNNMedium(nn.Module):
         out = out.unsqueeze(1).expand(-1, self.num_objects, -1, -1, -1)
         out = out.reshape(-1, out.size(2), out.size(3), out.size(4))
         return out
-
-
-class BroadcastDecoder(nn.Module):
-    def __init__(self, latent_dim, output_dim, hidden_channels,
-                 num_layers, img_dims, act_fn='elu'):
-        super(BroadcastDecoder, self).__init__()
-
-        self.latent_dim = latent_dim
-        self.width = img_dims[0]
-        self.height = img_dims[1]
-        self.num_layers = num_layers
-
-        mods = [nn.Conv2d(latent_dim + 2, hidden_channels, 3),
-                util.get_act_fn(act_fn)]
-
-        for _ in range(num_layers - 1):
-            mods.extend([nn.Conv2d(hidden_channels, hidden_channels, 3), util.get_act_fn(act_fn)])
-
-        # 1x1 conv for output layer
-        mods.append(nn.Conv2d(hidden_channels, output_dim, 1))
-        self.seq = nn.Sequential(*mods)
-
-    def sb(self, ins):
-        """ Broadcast z spatially across image size and
-            append x and y coordinates. """
-        batch_size = ins.size(0)
-
-        # Expand spatially: (n, z_dim) -> (n, z_dim, h, w)
-        z_b = ins.view((batch_size, -1, 1, 1)).expand(-1, -1,
-                                                      self.width + 2*self.num_layers,
-                                                      self.height + 2*self.num_layers)
-
-        # Coordinate axes:
-        x = torch.linspace(-1, 1, self.width + 2*self.num_layers, device=ins.device)
-        y = torch.linspace(-1, 1, self.height + 2*self.num_layers, device=ins.device)
-        y_b, x_b = torch.meshgrid(y, x)
-        # Expand from (h, w) -> (n, 1, h, w)
-        x_b = x_b.expand(batch_size, 1, -1, -1)
-        y_b = y_b.expand(batch_size, 1, -1, -1)
-        # Concatenate along the channel dimension: final shape = (n, z_dim + 2, h, w)
-        z_sb = torch.cat((z_b, x_b, y_b), dim=1)
-        return z_sb
-
-    def forward(self, ins):
-        z_sb = self.sb(ins)
-        return self.seq(z_sb)
-
-
-class PixelCoords(nn.Module):
-    def __init__(self, im_dim):
-        super(PixelCoords, self).__init__()
-        g_1, g_2 = torch.meshgrid(torch.linspace(-1, 1, im_dim),
-                                  torch.linspace(-1, 1, im_dim))
-        # Adds 2 extra dims to g_1
-        self.register_buffer('g_1', g_1.view((1, 1) + g_1.shape))
-        self.register_buffer('g_2', g_2.view((1, 1) + g_2.shape))
-
-    def forward(self, x):
-        # Expand first dim to batch size
-        g_1 = self.g_1.expand(x.size(0), -1, -1, -1)
-        g_2 = self.g_2.expand(x.size(0), -1, -1, -1)
-        return torch.cat((x, g_1, g_2), dim=1)
-
-
-class BroadcastLayer(nn.Module):
-    def __init__(self, dim):
-        super(BroadcastLayer, self).__init__()
-        self.dim = dim
-        self.pixel_coords = PixelCoords(dim)
-
-    def forward(self, x):
-        batch_size = x.size(0)
-        # Broadcast
-        if x.dim() == 2:
-            x = x.view(batch_size, -1, 1, 1)
-            x = x.expand(-1, -1, self.dim, self.dim)
-        else:
-            x = F.interpolate(x, self.dim)
-
-        return self.pixel_coords(x)
-
-
-class GenesisBroadcastDecoder(nn.Module):
-    """ Broadcast decoder adapted from genesis code. """
-
-    def __init__(self, latent_dim, output_dim, hidden_channels,
-                 num_layers, img_dim, act_fn='elu'):
-        super(BroadcastDecoder, self).__init__()
-        broad_dim = img_dim + 2*num_layers
-
-        mods = [BroadcastLayer(broad_dim),
-                nn.Conv2d(latent_dim + 2, hidden_channels, 3),
-                util.get_act_fn(act_fn)]
-
-        for _ in range(num_layers - 1):
-            mods.extend([nn.Conv2d(hidden_channels, hidden_channels, 3), util.get_act_fn(act_fn)])
-
-        # 1x1 conv for output layer
-        mods.append(nn.Conv2d(hidden_channels, output_dim, 1))
-        self.seq = nn.Sequential(*mods)
-
-    def forward(self, x):
-        # Input should have shape (batch size, latent_dim)
-        return self.seq(x)
-
-

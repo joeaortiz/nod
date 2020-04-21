@@ -73,3 +73,35 @@ class TwoViewsDataset(data.Dataset):
             'pose2': pose2.flatten()[:12]
         }
         return sample
+
+
+class PosedImagesDataset(data.Dataset):
+    """Create dataset of (I, T}) image and pose pairs."""
+
+    def __init__(self, data_dir, num_views=1000000, sidelength=None):
+        self.sidelength = sidelength
+
+        color_dir = os.path.join(data_dir, "rgb")
+        pose_dir = os.path.join(data_dir, "pose")
+
+        if not os.path.isdir(color_dir) or not os.path.isdir(pose_dir):
+            print("Error! root dir %s is wrong" % data_dir)
+            return
+
+        self.rgb_paths = sorted(data_util.glob_imgs(color_dir))[:num_views]
+        self.pose_paths = sorted(glob(os.path.join(pose_dir, "*.txt")))[:num_views]
+
+    def __len__(self):
+        return len(self.rgb_paths)
+
+    def __getitem__(self, idx):
+
+        img = data_util.load_rgb(self.rgb_paths[idx],
+                                 sidelength=self.sidelength).transpose(2, 0, 1)
+        pose = data_util.load_pose(self.pose_paths[idx])
+
+        sample = {
+            'image': img,
+            'pose': pose.flatten()[:12]
+        }
+        return sample
